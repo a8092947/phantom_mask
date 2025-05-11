@@ -179,3 +179,60 @@
 3. 實作 API 控制器
 4. 實作 API 路由
 5. 撰寫 API 文件
+
+## 5. Model 層設計
+
+### 5.1 Model 關聯關係
+1. Pharmacy (藥局)
+   - hasMany OpeningHour (營業時間)
+   - hasMany Mask (口罩產品)
+   - hasMany Transaction (交易記錄)
+
+2. OpeningHour (營業時間)
+   - belongsTo Pharmacy (藥局)
+
+3. Mask (口罩產品)
+   - belongsTo Pharmacy (藥局)
+   - hasMany Transaction (交易記錄)
+
+4. PharmacyUser (用戶)
+   - hasMany Transaction (交易記錄)
+
+5. Transaction (交易記錄)
+   - belongsTo PharmacyUser (用戶)
+   - belongsTo Pharmacy (藥局)
+   - belongsTo Mask (口罩產品)
+
+### 5.2 Model 屬性設定
+1. 可批量賦值屬性 (fillable)
+   - 設定每個 Model 可被批量賦值的欄位
+   - 確保資料安全性
+
+2. 日期轉換 (casts)
+   - 金額欄位使用 decimal:2
+   - 時間欄位使用 datetime
+   - 確保資料型態正確
+
+### 5.3 設計理念
+1. 關聯關係
+   - 使用適當的關聯方法
+   - 確保資料完整性
+   - 方便資料查詢
+
+2. 資料型態
+   - 使用適當的型態轉換
+   - 確保資料精確度
+   - 方便資料處理
+
+3. 安全性
+   - 使用 fillable 控制可賦值欄位
+   - 避免大量賦值漏洞
+   - 確保資料安全
+
+### 5.4 系統變更記錄
+
+#### 5.4.1 2024-05-11
+1. 建立所有 Model 檔案
+2. 設定 Model 關聯關係
+3. 設定 Model 屬性
+4. 加入詳細的註解說明
