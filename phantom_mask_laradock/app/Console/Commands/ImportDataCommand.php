@@ -40,22 +40,22 @@ class ImportDataCommand extends Command
 
         try {
             // 檢查資料類型
-            if (!in_array($type, $this->validTypes)) {
+        if (!in_array($type, $this->validTypes)) {
                 throw new \Exception('無效的資料類型');
-            }
+        }
 
             // 檢查檔案
-            if (!file_exists($file)) {
+        if (!file_exists($file)) {
                 throw new \Exception("檔案不存在: {$file}");
-            }
+        }
 
             // 讀取並解析 JSON
             $content = file_get_contents($file);
             $data = json_decode($content, true);
 
-            if (json_last_error() !== JSON_ERROR_NONE) {
+        if (json_last_error() !== JSON_ERROR_NONE) {
                 throw new \Exception('JSON 格式錯誤: ' . json_last_error_msg());
-            }
+        }
 
             $this->stats['total'] = count($data);
 
@@ -75,11 +75,11 @@ class ImportDataCommand extends Command
             $this->info("驗證通過！");
 
             // 如果沒有 --commit，就結束
-            if (!$shouldCommit) {
+        if (!$shouldCommit) {
                 $this->info("未加 --commit，未寫入資料庫。");
                 $this->info("請確認無誤後加上 --commit 參數進行匯入。");
-                return 0;
-            }
+            return 0;
+        }
 
             // 開始匯入
             $this->info("開始寫入資料庫...");
@@ -89,17 +89,17 @@ class ImportDataCommand extends Command
                 $bar = $this->output->createProgressBar(count($data));
                 $bar->start();
 
-                foreach ($data as $item) {
-                    $this->importItem($type, $item);
-                    $bar->advance();
-                }
+            foreach ($data as $item) {
+                $this->importItem($type, $item);
+                $bar->advance();
+            }
 
-                DB::commit();
-                $bar->finish();
-                $this->info("\n\n資料匯入完成！");
-                return 0;
-            } catch (\Exception $e) {
-                DB::rollBack();
+            DB::commit();
+            $bar->finish();
+            $this->info("\n\n資料匯入完成！");
+            return 0;
+        } catch (\Exception $e) {
+            DB::rollBack();
                 throw $e;
             }
         } catch (\Exception $e) {
@@ -133,7 +133,7 @@ class ImportDataCommand extends Command
                     'index' => $index,
                     'data' => $item,
                     'error' => $e->getMessage()
-                ];
+        ];
             }
         }
     }
@@ -313,13 +313,13 @@ class ImportDataCommand extends Command
                 } else {
                     // 處理不連續日期 (例如: Mon, Wed, Fri)
                     $days = array_map('trim', explode(',', $days));
-                    foreach ($days as $day) {
+                foreach ($days as $day) {
                         $dayIndex = $this->getDayIndex($day);
                         if ($dayIndex !== null) {
                             $this->createOpeningHour($pharmacy, $dayIndex, $openTime, $closeTime);
-                        }
-                    }
                 }
+            }
+        }
             }
         }
     }

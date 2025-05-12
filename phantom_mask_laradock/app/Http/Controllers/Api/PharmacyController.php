@@ -29,27 +29,56 @@ class PharmacyController extends Controller
     /**
      * @OA\Get(
      *     path="/api/pharmacies",
-     *     summary="取得藥局列表",
+     *     summary="取得藥局列表，支援搜尋、過濾和排序",
      *     tags={"藥局"},
      *     @OA\Parameter(
      *         name="day",
      *         in="query",
-     *         description="星期幾 (Mon/Tue/Wed/Thu/Fri/Sat/Sun)",
+     *         description="星期幾 (Monday/Tuesday/Wednesday/Thursday/Friday/Saturday/Sunday)",
      *         required=false,
-     *         @OA\Schema(type="string", enum={"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"})
+     *         @OA\Schema(type="string", enum={"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"})
      *     ),
      *     @OA\Parameter(
      *         name="time",
      *         in="query",
      *         description="時間 (HH:mm)",
      *         required=false,
-     *         @OA\Schema(type="string", pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$")
+     *         @OA\Schema(type="string", format="time", pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$")
+     *     ),
+     *     @OA\Parameter(
+     *         name="q",
+     *         in="query",
+     *         description="搜尋關鍵字（藥局名稱或口罩名稱）",
+     *         required=false,
+     *         @OA\Schema(type="string", minLength=1)
+     *     ),
+     *     @OA\Parameter(
+     *         name="min_price",
+     *         in="query",
+     *         description="最低價格",
+     *         required=false,
+     *         @OA\Schema(type="number", format="float", minimum=0)
+     *     ),
+     *     @OA\Parameter(
+     *         name="max_price",
+     *         in="query",
+     *         description="最高價格",
+     *         required=false,
+     *         @OA\Schema(type="number", format="float", minimum=0)
+     *     ),
+     *     @OA\Parameter(
+     *         name="mask_count",
+     *         in="query",
+     *         description="最少口罩數量",
+     *         required=false,
+     *         @OA\Schema(type="integer", minimum=1)
      *     ),
      *     @OA\Response(
      *         response=200,
      *         description="成功取得藥局列表",
      *         @OA\JsonContent(
-     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="status", type="string", example="success"),
+     *             @OA\Property(property="message", type="string", example="success"),
      *             @OA\Property(
      *                 property="data",
      *                 type="array",
@@ -61,9 +90,19 @@ class PharmacyController extends Controller
      *                         property="opening_hours",
      *                         type="array",
      *                         @OA\Items(
-     *                             @OA\Property(property="day", type="integer", example=1),
-     *                             @OA\Property(property="open_time", type="string", example="08:00"),
-     *                             @OA\Property(property="close_time", type="string", example="17:00")
+     *                             @OA\Property(property="day", type="string", example="Monday"),
+     *                             @OA\Property(property="open", type="string", example="08:00"),
+     *                             @OA\Property(property="close", type="string", example="17:00")
+     *                         )
+     *                     ),
+     *                     @OA\Property(
+     *                         property="masks",
+     *                         type="array",
+     *                         @OA\Items(
+     *                             @OA\Property(property="id", type="integer", example=1),
+     *                             @OA\Property(property="name", type="string", example="Black Mask"),
+     *                             @OA\Property(property="price", type="number", format="float", example=10.00),
+     *                             @OA\Property(property="stock", type="integer", example=100, description="庫存數量")
      *                         )
      *                     )
      *                 )
@@ -72,69 +111,141 @@ class PharmacyController extends Controller
      *     ),
      *     @OA\Response(
      *         response=422,
-     *         description="驗證錯誤"
+     *         description="驗證錯誤",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="string", example="error"),
+     *             @OA\Property(property="message", type="string", example="驗證失敗"),
+     *             @OA\Property(property="errors", type="object")
+     *         )
      *     ),
      *     @OA\Response(
      *         response=500,
-     *         description="伺服器錯誤"
+     *         description="伺服器錯誤",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="string", example="error"),
+     *             @OA\Property(property="message", type="string", example="查詢藥局失敗"),
+     *             @OA\Property(property="errors", type="object")
+     *         )
      *     )
      * )
      */
     public function index(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'day' => 'nullable|in:Mon,Tue,Wed,Thu,Fri,Sat,Sun',
-            'time' => 'nullable|regex:/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/'
-        ]);
-
-        if ($validator->fails()) {
-            Log::warning('Pharmacy index validation failed', ['errors' => $validator->errors()]);
-            return $this->error('驗證失敗', $validator->errors(), 422);
-        }
-
         try {
-            $query = Pharmacy::query();
+            $validator = Validator::make($request->all(), [
+                'day' => 'nullable|string|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
+                'time' => 'nullable|date_format:H:i',
+                'q' => 'nullable|string|min:1',
+                'min_price' => 'nullable|numeric|min:0',
+                'max_price' => 'nullable|numeric|min:0|gte:min_price',
+                'mask_count' => 'nullable|integer|min:1'
+            ]);
 
-            // 如果有指定星期幾和時間，查詢營業中的藥局
-            if ($request->has('day') && $request->has('time')) {
-                $dayIndex = $this->getDayIndex($request->day);
-                $time = $request->time;
+            if ($validator->fails()) {
+                Log::warning('Pharmacy index validation failed', ['errors' => $validator->errors()]);
+                return $this->error('驗證失敗', $validator->errors(), 422);
+            }
 
-                $query->whereHas('openingHours', function ($q) use ($dayIndex, $time) {
-                    $q->where('day', $dayIndex)
-                      ->where('open_time', '<=', $time)
-                      ->where('close_time', '>=', $time);
+            $query = Pharmacy::with(['openingHours', 'masks']);
+
+            // 營業時間篩選
+            if ($request->has('day') || $request->has('time')) {
+                $query->whereHas('openingHours', function ($q) use ($request) {
+                    if ($request->has('day')) {
+                        $q->where('day', $request->day);
+                    }
+                    if ($request->has('time')) {
+                        $q->where('open_time', '<=', $request->time)
+                          ->where('close_time', '>=', $request->time);
+                    }
                 });
             }
 
-            $pharmacies = $query->with('openingHours')->get();
+            // 搜尋功能
+            if ($request->has('q')) {
+                $searchTerm = $request->q;
+                $searchWords = explode(' ', $searchTerm);
 
-            return $this->success($pharmacies);
+                $query->where(function ($q) use ($searchWords) {
+                    foreach ($searchWords as $word) {
+                        $q->orWhere('name', 'LIKE', '%' . $word . '%')
+                          ->orWhereHas('masks', function ($q) use ($word) {
+                              $q->where('name', 'LIKE', '%' . $word . '%');
+                          });
+                    }
+                });
+
+                // 根據相關性排序
+                $query->orderByRaw("
+                    CASE 
+                        WHEN name LIKE ? THEN 1
+                        WHEN name LIKE ? THEN 2
+                        WHEN EXISTS (
+                            SELECT 1 FROM masks 
+                            WHERE masks.pharmacy_id = pharmacies.id 
+                            AND masks.name LIKE ?
+                        ) THEN 3
+                        WHEN EXISTS (
+                            SELECT 1 FROM masks 
+                            WHERE masks.pharmacy_id = pharmacies.id 
+                            AND masks.name LIKE ?
+                        ) THEN 4
+                        ELSE 5
+                    END
+                ", [$searchTerm, '%' . $searchTerm . '%', $searchTerm, '%' . $searchTerm . '%']);
+            }
+
+            // 價格範圍和口罩數量過濾
+            if ($request->has('min_price') || $request->has('max_price') || $request->has('mask_count')) {
+                if ($request->has('min_price')) {
+                    $query->whereHas('masks', function ($q) use ($request) {
+                        $q->where('price', '>=', $request->min_price);
+                    });
+                }
+
+                if ($request->has('max_price')) {
+                    $query->whereHas('masks', function ($q) use ($request) {
+                        $q->where('price', '<=', $request->max_price);
+                    });
+                }
+
+                if ($request->has('mask_count')) {
+                    $query->whereHas('masks', function ($q) use ($request) {
+                        $q->where('stock', '>=', $request->mask_count);
+                    });
+                }
+            }
+
+            $pharmacies = $query->get();
+
+            $result = $pharmacies->map(function ($pharmacy) {
+                return [
+                    'id' => $pharmacy->id,
+                    'name' => $pharmacy->name,
+                    'cash_balance' => $pharmacy->cash_balance,
+                    'opening_hours' => collect($pharmacy->openingHours)->map(function ($oh) {
+                        return [
+                            'day' => $oh->day ?? $oh->day_of_week,
+                            'open' => isset($oh->open_time) ? (is_string($oh->open_time) ? $oh->open_time : $oh->open_time->format('H:i')) : null,
+                            'close' => isset($oh->close_time) ? (is_string($oh->close_time) ? $oh->close_time : $oh->close_time->format('H:i')) : null,
+                        ];
+                    })->toArray(),
+                    'masks' => collect($pharmacy->masks)->map(function ($mask) {
+                        return [
+                            'id' => $mask->id,
+                            'name' => $mask->name,
+                            'price' => $mask->price,
+                            'stock' => $mask->stock,
+                        ];
+                    })->toArray(),
+                ];
+            })->toArray();
+
+            return $this->success($result);
         } catch (\Exception $e) {
             Log::error('Pharmacy index failed', ['error' => $e->getMessage()]);
-            return $this->error('取得藥局列表失敗', ['error' => $e->getMessage()], 500);
+            return $this->error('查詢藥局失敗', ['error' => $e->getMessage()], 500);
         }
-    }
-
-    /**
-     * 取得星期幾的索引
-     *
-     * @param string $day
-     * @return int|null
-     */
-    private function getDayIndex(string $day): ?int
-    {
-        $days = [
-            'Mon' => 1,
-            'Tue' => 2,
-            'Wed' => 3,
-            'Thu' => 4,
-            'Fri' => 5,
-            'Sat' => 6,
-            'Sun' => 7
-        ];
-
-        return $days[$day] ?? null;
     }
 
     /**
@@ -167,7 +278,8 @@ class PharmacyController extends Controller
      *         response=200,
      *         description="成功取得藥局詳細資訊",
      *         @OA\JsonContent(
-     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="status", type="string", example="success"),
+     *             @OA\Property(property="message", type="string", example="success"),
      *             @OA\Property(
      *                 property="data",
      *                 type="object",
@@ -178,9 +290,9 @@ class PharmacyController extends Controller
      *                     property="opening_hours",
      *                     type="array",
      *                     @OA\Items(
-     *                         @OA\Property(property="day", type="integer", example=1),
-     *                         @OA\Property(property="open_time", type="string", example="08:00"),
-     *                         @OA\Property(property="close_time", type="string", example="17:00")
+     *                         @OA\Property(property="day", type="string", example="Monday"),
+     *                         @OA\Property(property="open", type="string", example="08:00"),
+     *                         @OA\Property(property="close", type="string", example="17:00")
      *                     )
      *                 ),
      *                 @OA\Property(
@@ -198,15 +310,21 @@ class PharmacyController extends Controller
      *     ),
      *     @OA\Response(
      *         response=404,
-     *         description="藥局不存在"
-     *     ),
-     *     @OA\Response(
-     *         response=422,
-     *         description="驗證錯誤"
+     *         description="藥局不存在",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="string", example="error"),
+     *             @OA\Property(property="message", type="string", example="藥局不存在"),
+     *             @OA\Property(property="errors", type="object")
+     *         )
      *     ),
      *     @OA\Response(
      *         response=500,
-     *         description="伺服器錯誤"
+     *         description="伺服器錯誤",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="string", example="error"),
+     *             @OA\Property(property="message", type="string", example="取得藥局詳細資訊失敗"),
+     *             @OA\Property(property="errors", type="object")
+     *         )
      *     )
      * )
      */
@@ -230,232 +348,34 @@ class PharmacyController extends Controller
                 }
             }])->findOrFail($id);
 
-            return $this->success($pharmacy);
+            $result = [
+                'id' => $pharmacy->id,
+                'name' => $pharmacy->name,
+                'cash_balance' => $pharmacy->cash_balance,
+                'opening_hours' => collect($pharmacy->openingHours)->map(function ($oh) {
+                    return [
+                        'day' => $oh->day ?? $oh->day_of_week,
+                        'open' => isset($oh->open_time) ? (is_string($oh->open_time) ? $oh->open_time : $oh->open_time->format('H:i')) : null,
+                        'close' => isset($oh->close_time) ? (is_string($oh->close_time) ? $oh->close_time : $oh->close_time->format('H:i')) : null,
+                    ];
+                })->toArray(),
+                'masks' => collect($pharmacy->masks)->map(function ($mask) {
+                    return [
+                        'id' => $mask->id,
+                        'name' => $mask->name,
+                        'price' => $mask->price,
+                        'stock' => $mask->stock,
+                    ];
+                })->toArray(),
+            ];
+
+            return $this->success($result);
         } catch (ModelNotFoundException $e) {
             Log::warning('Pharmacy not found', ['id' => $id]);
             return $this->error('藥局不存在', [], 404);
         } catch (\Exception $e) {
             Log::error('Pharmacy show failed', ['error' => $e->getMessage()]);
             return $this->error('取得藥局詳細資訊失敗', ['error' => $e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * @OA\Get(
-     *     path="/api/pharmacies/search",
-     *     summary="搜尋藥局或口罩",
-     *     tags={"藥局"},
-     *     @OA\Parameter(
-     *         name="q",
-     *         in="query",
-     *         description="搜尋關鍵字",
-     *         required=true,
-     *         @OA\Schema(type="string")
-     *     ),
-     *     @OA\Parameter(
-     *         name="type",
-     *         in="query",
-     *         description="搜尋類型 (pharmacy/mask)",
-     *         required=false,
-     *         @OA\Schema(type="string", enum={"pharmacy", "mask"})
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="成功搜尋藥局或口罩",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(
-     *                 property="data",
-     *                 type="array",
-     *                 @OA\Items(
-     *                     @OA\Property(property="id", type="integer", example=1),
-     *                     @OA\Property(property="name", type="string", example="DFW Wellness"),
-     *                     @OA\Property(property="cash_balance", type="number", format="float", example=328.41),
-     *                     @OA\Property(
-     *                         property="opening_hours",
-     *                         type="array",
-     *                         @OA\Items(
-     *                             @OA\Property(property="day", type="integer", example=1),
-     *                             @OA\Property(property="open_time", type="string", example="08:00"),
-     *                             @OA\Property(property="close_time", type="string", example="17:00")
-     *                         )
-     *                     ),
-     *                     @OA\Property(
-     *                         property="masks",
-     *                         type="array",
-     *                         @OA\Items(
-     *                             @OA\Property(property="id", type="integer", example=1),
-     *                             @OA\Property(property="name", type="string", example="Black Mask"),
-     *                             @OA\Property(property="price", type="number", format="float", example=10.00),
-     *                             @OA\Property(property="stock", type="integer", example=100)
-     *                         )
-     *                     )
-     *                 )
-     *             )
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=422,
-     *         description="驗證錯誤"
-     *     ),
-     *     @OA\Response(
-     *         response=500,
-     *         description="伺服器錯誤"
-     *     )
-     * )
-     */
-    public function search(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'q' => 'required|string|min:1',
-            'type' => 'nullable|in:pharmacy,mask'
-        ]);
-
-        if ($validator->fails()) {
-            Log::warning('Pharmacy search validation failed', ['errors' => $validator->errors()]);
-            return $this->error('驗證失敗', $validator->errors(), 422);
-        }
-
-        try {
-            $query = Pharmacy::with(['openingHours', 'masks']);
-
-            // 根據搜尋類型進行搜尋
-            if ($request->type === 'pharmacy') {
-                $query->where('name', 'like', '%' . $request->q . '%');
-            } elseif ($request->type === 'mask') {
-                $query->whereHas('masks', function ($q) use ($request) {
-                    $q->where('name', 'like', '%' . $request->q . '%');
-                });
-            } else {
-                $query->where(function ($q) use ($request) {
-                    $q->where('name', 'like', '%' . $request->q . '%')
-                      ->orWhereHas('masks', function ($q) use ($request) {
-                          $q->where('name', 'like', '%' . $request->q . '%');
-                      });
-                });
-            }
-
-            $pharmacies = $query->get();
-
-            return $this->success($pharmacies);
-        } catch (\Exception $e) {
-            Log::error('Pharmacy search failed', ['error' => $e->getMessage()]);
-            return $this->error('搜尋藥局或口罩失敗', ['error' => $e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * @OA\Get(
-     *     path="/api/pharmacies/filter",
-     *     summary="查詢特定價格範圍內有指定數量以上口罩的藥局",
-     *     tags={"藥局"},
-     *     @OA\Parameter(
-     *         name="min_price",
-     *         in="query",
-     *         description="最低價格",
-     *         required=false,
-     *         @OA\Schema(type="number", format="float", minimum=0)
-     *     ),
-     *     @OA\Parameter(
-     *         name="max_price",
-     *         in="query",
-     *         description="最高價格",
-     *         required=false,
-     *         @OA\Schema(type="number", format="float", minimum=0)
-     *     ),
-     *     @OA\Parameter(
-     *         name="mask_count",
-     *         in="query",
-     *         description="最少口罩數量",
-     *         required=false,
-     *         @OA\Schema(type="integer", minimum=1)
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="成功取得藥局列表",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(
-     *                 property="data",
-     *                 type="array",
-     *                 @OA\Items(
-     *                     @OA\Property(property="id", type="integer", example=1),
-     *                     @OA\Property(property="name", type="string", example="DFW Wellness"),
-     *                     @OA\Property(property="cash_balance", type="number", format="float", example=328.41),
-     *                     @OA\Property(
-     *                         property="opening_hours",
-     *                         type="array",
-     *                         @OA\Items(
-     *                             @OA\Property(property="day", type="integer", example=1),
-     *                             @OA\Property(property="open_time", type="string", example="08:00"),
-     *                             @OA\Property(property="close_time", type="string", example="17:00")
-     *                         )
-     *                     ),
-     *                     @OA\Property(
-     *                         property="masks",
-     *                         type="array",
-     *                         @OA\Items(
-     *                             @OA\Property(property="id", type="integer", example=1),
-     *                             @OA\Property(property="name", type="string", example="Black Mask"),
-     *                             @OA\Property(property="price", type="number", format="float", example=10.00),
-     *                             @OA\Property(property="stock", type="integer", example=100)
-     *                         )
-     *                     )
-     *                 )
-     *             )
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=422,
-     *         description="驗證錯誤"
-     *     ),
-     *     @OA\Response(
-     *         response=500,
-     *         description="伺服器錯誤"
-     *     )
-     * )
-     */
-    public function filter(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'min_price' => 'nullable|numeric|min:0',
-            'max_price' => 'nullable|numeric|min:0|gte:min_price',
-            'mask_count' => 'nullable|integer|min:1'
-        ]);
-
-        if ($validator->fails()) {
-            Log::warning('Pharmacy filter validation failed', ['errors' => $validator->errors()]);
-            return $this->error('驗證失敗', $validator->errors(), 422);
-        }
-
-        try {
-            $query = Pharmacy::with(['openingHours', 'masks']);
-
-            // 如果有指定價格範圍
-            if ($request->has('min_price') || $request->has('max_price')) {
-                $query->whereHas('masks', function ($q) use ($request) {
-                    if ($request->has('min_price')) {
-                        $q->where('price', '>=', $request->min_price);
-                    }
-                    if ($request->has('max_price')) {
-                        $q->where('price', '<=', $request->max_price);
-                    }
-                });
-            }
-
-            // 如果有指定最少口罩數量
-            if ($request->has('mask_count')) {
-                $query->whereHas('masks', function ($q) use ($request) {
-                    $q->where('stock', '>=', $request->mask_count);
-                }, '>=', $request->mask_count);
-            }
-
-            $pharmacies = $query->get();
-
-            return $this->success($pharmacies);
-        } catch (\Exception $e) {
-            Log::error('Pharmacy filter failed', ['error' => $e->getMessage()]);
-            return $this->error('查詢藥局失敗', ['error' => $e->getMessage()], 500);
         }
     }
 }

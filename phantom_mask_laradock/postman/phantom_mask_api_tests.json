@@ -1,0 +1,509 @@
+{
+  "info": {
+    "name": "Phantom Mask API Tests",
+    "description": "藥局口罩平台 API 測試集合",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "藥局 API",
+      "item": [
+        {
+          "name": "藥局列表",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/pharmacies",
+              "host": ["{{base_url}}"],
+              "path": ["api", "pharmacies"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"藥局列表 API 測試\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('data');",
+                  "    pm.expect(response.data).to.be.an('array');",
+                  "    if (response.data.length > 0) {",
+                  "        const pharmacy = response.data[0];",
+                  "        pm.expect(pharmacy).to.have.property('id');",
+                  "        pm.expect(pharmacy).to.have.property('name');",
+                  "        pm.expect(pharmacy).to.have.property('cash_balance');",
+                  "        pm.expect(pharmacy).to.have.property('opening_hours');",
+                  "        pm.expect(pharmacy).to.have.property('masks');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "藥局詳情",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/pharmacies/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "pharmacies", "1"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"藥局詳情 API 測試\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('data');",
+                  "    const pharmacy = response.data;",
+                  "    pm.expect(pharmacy).to.have.property('id');",
+                  "    pm.expect(pharmacy).to.have.property('name');",
+                  "    pm.expect(pharmacy).to.have.property('cash_balance');",
+                  "    pm.expect(pharmacy).to.have.property('opening_hours');",
+                  "    pm.expect(pharmacy).to.have.property('masks');",
+                  "    pm.expect(pharmacy.opening_hours).to.be.an('array');",
+                  "    if (pharmacy.opening_hours.length > 0) {",
+                  "        const openingHour = pharmacy.opening_hours[0];",
+                  "        pm.expect(openingHour).to.have.property('day');",
+                  "        pm.expect(openingHour).to.have.property('open');",
+                  "        pm.expect(openingHour).to.have.property('close');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "藥局搜尋",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/pharmacies?q=Health&type=pharmacy",
+              "host": ["{{base_url}}"],
+              "path": ["api", "pharmacies"],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "Health"
+                },
+                {
+                  "key": "type",
+                  "value": "pharmacy"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"藥局搜尋 API 測試\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('data');",
+                  "    pm.expect(response.data).to.be.an('array');",
+                  "    if (response.data.length > 0) {",
+                  "        const pharmacy = response.data[0];",
+                  "        pm.expect(pharmacy).to.have.property('id');",
+                  "        pm.expect(pharmacy).to.have.property('name');",
+                  "        pm.expect(pharmacy).to.have.property('masks');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "藥局過濾",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/pharmacies?min_price=10&max_price=20&mask_count=5",
+              "host": ["{{base_url}}"],
+              "path": ["api", "pharmacies"],
+              "query": [
+                {
+                  "key": "min_price",
+                  "value": "10"
+                },
+                {
+                  "key": "max_price",
+                  "value": "20"
+                },
+                {
+                  "key": "mask_count",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"藥局過濾 API 測試\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('data');",
+                  "    pm.expect(response.data).to.be.an('array');",
+                  "    if (response.data.length > 0) {",
+                  "        const pharmacy = response.data[0];",
+                  "        pm.expect(pharmacy).to.have.property('id');",
+                  "        pm.expect(pharmacy).to.have.property('name');",
+                  "        pm.expect(pharmacy).to.have.property('masks');",
+                  "        if (pharmacy.masks.length > 0) {",
+                  "            const mask = pharmacy.masks[0];",
+                  "            pm.expect(mask).to.have.property('price');",
+                  "            pm.expect(mask.price).to.be.a('number');",
+                  "            pm.expect(mask.price).to.be.at.least(10);",
+                  "            pm.expect(mask.price).to.be.at.most(20);",
+                  "            pm.expect(mask.stock).to.be.at.least(5);",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "藥局營業時間篩選",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/pharmacies?day=Monday&time=14:30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "pharmacies"],
+              "query": [
+                {
+                  "key": "day",
+                  "value": "Monday"
+                },
+                {
+                  "key": "time",
+                  "value": "14:30"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"藥局營業時間篩選 API 測試\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('data');",
+                  "    pm.expect(response.data).to.be.an('array');",
+                  "    if (response.data.length > 0) {",
+                  "        const pharmacy = response.data[0];",
+                  "        pm.expect(pharmacy).to.have.property('opening_hours');",
+                  "        const mondayHours = pharmacy.opening_hours.find(h => h.day === 'Monday');",
+                  "        if (mondayHours) {",
+                  "            pm.expect(mondayHours.open).to.be.lessThanOrEqual('14:30');",
+                  "            pm.expect(mondayHours.close).to.be.greaterThanOrEqual('14:30');",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "藥局口罩排序",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/pharmacies/1?sort=price&order=desc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "pharmacies", "1"],
+              "query": [
+                {
+                  "key": "sort",
+                  "value": "price"
+                },
+                {
+                  "key": "order",
+                  "value": "desc"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"藥局口罩排序 API 測試\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('data');",
+                  "    const pharmacy = response.data;",
+                  "    pm.expect(pharmacy).to.have.property('masks');",
+                  "    pm.expect(pharmacy.masks).to.be.an('array');",
+                  "    if (pharmacy.masks.length > 1) {",
+                  "        for (let i = 0; i < pharmacy.masks.length - 1; i++) {",
+                  "            pm.expect(pharmacy.masks[i].price).to.be.greaterThanOrEqual(pharmacy.masks[i + 1].price);",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "交易 API",
+      "item": [
+        {
+          "name": "交易排行榜",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/transactions/top-users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "transactions", "top-users"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"交易排行榜 API 測試\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('data');",
+                  "    pm.expect(response.data).to.be.an('array');",
+                  "    if (response.data.length > 0) {",
+                  "        const user = response.data[0];",
+                  "        pm.expect(user).to.have.property('id');",
+                  "        pm.expect(user).to.have.property('name');",
+                  "        pm.expect(user).to.have.property('cash_balance');",
+                  "        pm.expect(user).to.have.property('total_amount');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "交易統計",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/transactions/statistics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "transactions", "statistics"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"交易統計 API 測試\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('data');",
+                  "    const stats = response.data;",
+                  "    pm.expect(stats).to.have.property('total_transactions');",
+                  "    pm.expect(stats).to.have.property('total_amount');",
+                  "    pm.expect(stats).to.have.property('average_amount');",
+                  "    pm.expect(stats.total_transactions).to.be.a('number');",
+                  "    pm.expect(stats.total_amount).to.be.a('number');",
+                  "    pm.expect(stats.average_amount).to.be.a('number');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "建立交易",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/transactions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "transactions"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"user_id\": 1,\n    \"pharmacy_id\": 1,\n    \"mask_id\": 1,\n    \"amount\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"建立交易 API 測試\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('data');",
+                  "    const transaction = response.data;",
+                  "    pm.expect(transaction).to.have.property('id');",
+                  "    pm.expect(transaction).to.have.property('user_id');",
+                  "    pm.expect(transaction).to.have.property('pharmacy_id');",
+                  "    pm.expect(transaction).to.have.property('mask_id');",
+                  "    pm.expect(transaction).to.have.property('amount');",
+                  "    pm.expect(transaction).to.have.property('created_at');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "交易日期範圍過濾",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/transactions/statistics?start_date=2024-01-01&end_date=2024-03-31",
+              "host": ["{{base_url}}"],
+              "path": ["api", "transactions", "statistics"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2024-03-31"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"交易日期範圍過濾 API 測試\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('data');",
+                  "    const stats = response.data;",
+                  "    pm.expect(stats).to.have.property('total_transactions');",
+                  "    pm.expect(stats).to.have.property('total_amount');",
+                  "    pm.expect(stats).to.have.property('average_amount');",
+                  "    pm.expect(stats.total_transactions).to.be.a('number');",
+                  "    pm.expect(stats.total_amount).to.be.a('number');",
+                  "    pm.expect(stats.average_amount).to.be.a('number');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "錯誤處理",
+      "item": [
+        {
+          "name": "404 錯誤",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/not-found",
+              "host": ["{{base_url}}"],
+              "path": ["api", "not-found"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"404 錯誤處理\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('error');",
+                  "    pm.expect(response.error).to.have.property('message');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "422 錯誤",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/transactions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "transactions"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"invalid\": \"data\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"422 驗證錯誤處理\", function () {",
+                  "    pm.response.to.have.status(422);",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('error');",
+                  "    pm.expect(response.error).to.have.property('message');",
+                  "    pm.expect(response.error).to.have.property('errors');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://phantom_mask_laradock.kdan.succ.work",
+      "type": "string"
+    }
+  ]
+} 

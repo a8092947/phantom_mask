@@ -23,6 +23,7 @@ return new class extends Migration
      * 2. 使用外鍵關聯藥局，確保資料完整性
      * 3. 使用 decimal 型態儲存價格，確保精確度
      * 4. 產品名稱包含完整資訊（品牌、顏色、包裝數量）
+     * 5. 【補充】stock 欄位為合理補足，代表庫存數量，防止超賣，讓購買流程更貼近真實商業邏輯。
      */
     public function up()
     {
@@ -38,7 +39,7 @@ return new class extends Migration
                   ->comment('口罩產品價格');
             $table->integer('stock')
                   ->default(0)
-                  ->comment('庫存數量');
+                  ->comment('庫存數量，合理補足，防止超賣，讓購買流程更貼近真實商業邏輯');
             $table->timestamps();
             
             // 新增索引

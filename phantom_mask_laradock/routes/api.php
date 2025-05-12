@@ -8,8 +8,6 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('pharmacies')->group(function () {
     Route::get('/', [PharmacyController::class, 'index']);
     Route::get('/{id}', [PharmacyController::class, 'show']);
-    Route::get('/search', [PharmacyController::class, 'search']);
-    Route::get('/filter', [PharmacyController::class, 'filter']);
 });
 
 // 交易相關路由
