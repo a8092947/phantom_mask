@@ -15,11 +15,26 @@ use Carbon\Carbon;
 
 class ImportDataCommand extends Command
 {
-    protected $signature = 'import:data {type} {file} {--commit} {--force}';
-    protected $description = '匯入資料到資料庫';
+    protected $signature = 'import:data 
+        {type : 要匯入的資料類型 (pharmacy/user/mask/transaction)} 
+        {file : JSON 檔案路徑}
+        {--commit : 實際寫入資料庫（預設只驗證）}
+        {--force : 強制覆蓋已存在的資料}
+        {--skip-relation-check : 跳過關聯檢查}';
+
+    protected $description = '匯入資料到資料庫（預設只驗證，需加 --commit 才會寫入）';
 
     protected $validTypes = ['pharmacy', 'user', 'mask', 'transaction'];
     protected $weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    protected $stats = [
+        'total' => 0,
+        'success' => 0,
+        'failed' => 0,
+        'skipped' => 0,
+        'errors' => [],
+        'warnings' => []
+    ];
 
     public function handle()
     {
@@ -27,68 +42,77 @@ class ImportDataCommand extends Command
         $file = $this->argument('file');
         $shouldCommit = $this->option('commit');
         $force = $this->option('force');
-
-        if (!in_array($type, $this->validTypes)) {
-            $this->error('無效的資料類型');
-            return 1;
-        }
-
-        if (!file_exists($file)) {
-            $this->error('找不到檔案：' . $file);
-            return 1;
-        }
-
-        $data = json_decode(file_get_contents($file), true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            $this->error('JSON 解析錯誤：' . json_last_error_msg());
-            return 1;
-        }
-
-        $this->info('開始驗證資料...');
-        $validationResults = $this->validateData($type, $data);
-
-        $this->info("\n驗證報告：");
-        $this->info("總筆數: " . count($data));
-        $this->info("成功: " . $validationResults['success']);
-        $this->info("失敗: " . $validationResults['failed']);
-
-        if ($validationResults['failed'] > 0) {
-            $this->error("\n驗證失敗！");
-            if (!$force) {
-                $this->error('請修正錯誤後重試，或使用 --force 參數強制匯入');
-                return 1;
-            }
-            $this->warn('使用 --force 參數，將繼續匯入...');
-        } else {
-            $this->info("\n驗證通過！");
-        }
-
-        if (!$shouldCommit) {
-            $this->info("\n使用 --commit 參數來實際寫入資料庫");
-            return 0;
-        }
-
-        $this->info("\n開始寫入資料庫...");
-        $bar = $this->output->createProgressBar(count($data));
-        $bar->start();
+        $skipRelationCheck = $this->option('skip-relation-check');
 
         try {
-            DB::beginTransaction();
-
-            foreach ($data as $item) {
-                $this->importItem($type, $item);
-                $bar->advance();
+            // 檢查資料類型
+            if (!in_array($type, $this->validTypes)) {
+                throw new \Exception('無效的資料類型');
             }
 
-            DB::commit();
-            $bar->finish();
-            $this->info("\n\n資料匯入完成！");
-            return 0;
+            // 檢查檔案
+            if (!file_exists($file)) {
+                throw new \Exception("檔案不存在: {$file}");
+            }
+
+            // 讀取並解析 JSON
+            $content = file_get_contents($file);
+            $data = json_decode($content, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new \Exception('JSON 格式錯誤: ' . json_last_error_msg());
+            }
+
+            $this->stats['total'] = count($data);
+
+            // 驗證資料
+            $this->info("開始驗證資料...");
+            $this->validateData($data, $type, $force, $skipRelationCheck);
+
+            // 顯示驗證結果
+            $this->showValidationReport();
+
+            // 如果有錯誤，直接結束
+            if (!empty($this->stats['errors'])) {
+                $this->error("驗證失敗，請修正所有錯誤後再重試。");
+                return 1;
+            }
+
+            $this->info("驗證通過！");
+
+            // 如果沒有 --commit，就結束
+            if (!$shouldCommit) {
+                $this->info("未加 --commit，未寫入資料庫。");
+                $this->info("請確認無誤後加上 --commit 參數進行匯入。");
+                return 0;
+            }
+
+            // 開始匯入
+            $this->info("開始寫入資料庫...");
+            DB::beginTransaction();
+
+            try {
+                $bar = $this->output->createProgressBar(count($data));
+                $bar->start();
+
+                foreach ($data as $item) {
+                    $this->importItem($type, $item, $force);
+                    $bar->advance();
+                }
+
+                DB::commit();
+                $bar->finish();
+                $this->info("\n\n資料匯入完成！");
+                return 0;
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
         } catch (\Exception $e) {
-            DB::rollBack();
-            $this->error("\n\n資料匯入失敗：" . $e->getMessage());
-            Log::error('Import failed', [
+            $this->error("錯誤: " . $e->getMessage());
+            Log::error("匯入失敗", [
                 'type' => $type,
+                'file' => $file,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
@@ -96,71 +120,180 @@ class ImportDataCommand extends Command
         }
     }
 
-    protected function validateData($type, $data)
+    protected function validateData(array $data, string $type, bool $force, bool $skipRelationCheck)
     {
-        $success = 0;
-        $failed = 0;
+        foreach ($data as $index => $item) {
+            try {
+                switch ($type) {
+                    case 'pharmacy':
+                        $this->validatePharmacy($item, $index);
+                        break;
+                    case 'user':
+                        $this->validateUser($item, $index, $skipRelationCheck);
+                        break;
+                    case 'mask':
+                        $this->validateMask($item, $index);
+                        break;
+                    case 'transaction':
+                        $this->validateTransaction($item, $index);
+                        break;
+                }
+                $this->stats['success']++;
+            } catch (\Exception $e) {
+                $this->stats['failed']++;
+                $this->stats['errors'][] = [
+                    'index' => $index,
+                    'data' => $item,
+                    'error' => $e->getMessage()
+                ];
+            }
+        }
+    }
 
-        foreach ($data as $item) {
-            $validator = $this->getValidator($type, $item);
-            if ($validator->passes()) {
-                $success++;
-            } else {
-                $failed++;
-                $this->error("\n驗證失敗：");
-                foreach ($validator->errors()->all() as $error) {
-                    $this->error("- " . $error);
+    protected function validatePharmacy(array $data, int $index)
+    {
+        // 基本欄位驗證
+        $validator = Validator::make($data, [
+            'name' => 'required|string|max:255',
+            'cashBalance' => 'required|numeric|min:0',
+            'openingHours' => 'required|string',
+            'masks' => 'required|array'
+        ]);
+
+        if ($validator->fails()) {
+            throw new \Exception("藥局資料驗證失敗: " . json_encode($validator->errors()->toArray(), JSON_UNESCAPED_UNICODE));
+        }
+
+        // 驗證營業時間格式
+        if (!$this->validateOpeningHours($data['openingHours'])) {
+            throw new \Exception("無效的營業時間格式: {$data['openingHours']}");
+        }
+
+        // 驗證口罩資料
+        $maskNames = [];
+        foreach ($data['masks'] as $mask) {
+            $maskValidator = Validator::make($mask, [
+                'name' => 'required|string|max:255',
+                'price' => 'required|numeric|min:0'
+            ]);
+
+            if ($maskValidator->fails()) {
+                throw new \Exception("口罩資料驗證失敗: " . json_encode($maskValidator->errors()->toArray(), JSON_UNESCAPED_UNICODE));
+            }
+
+            if (in_array($mask['name'], $maskNames)) {
+                throw new \Exception("同一藥局內口罩名稱重複: {$mask['name']}");
+            }
+            $maskNames[] = $mask['name'];
+        }
+    }
+
+    protected function validateUser(array $data, int $index, bool $skipRelationCheck)
+    {
+        // 基本欄位驗證
+        $validator = Validator::make($data, [
+            'name' => 'required|string|max:255',
+            'cashBalance' => 'required|numeric|min:0',
+            'purchaseHistories' => 'required|array'
+        ]);
+
+        if ($validator->fails()) {
+            throw new \Exception("用戶資料驗證失敗: " . json_encode($validator->errors()->toArray(), JSON_UNESCAPED_UNICODE));
+        }
+
+        // 驗證購買記錄
+        foreach ($data['purchaseHistories'] as $historyIndex => $history) {
+            $historyValidator = Validator::make($history, [
+                'pharmacyName' => 'required|string|max:255',
+                'maskName' => 'required|string|max:255',
+                'transactionAmount' => 'required|numeric|min:0',
+                'transactionDate' => 'required|date'
+            ]);
+
+            if ($historyValidator->fails()) {
+                throw new \Exception("購買記錄 #{$historyIndex} 驗證失敗: " . 
+                    json_encode($historyValidator->errors()->toArray(), JSON_UNESCAPED_UNICODE));
+            }
+
+            // 關聯檢查（如果需要）
+            if (!$skipRelationCheck) {
+                $pharmacy = Pharmacy::where('name', $history['pharmacyName'])->first();
+                if (!$pharmacy) {
+                    $this->stats['warnings'][] = [
+                        'index' => $index,
+                        'history_index' => $historyIndex,
+                        'message' => "找不到藥局: {$history['pharmacyName']}"
+                    ];
+                } else {
+                    $mask = Mask::where('pharmacy_id', $pharmacy->id)
+                        ->where('name', $history['maskName'])
+                        ->first();
+                    if (!$mask) {
+                        $this->stats['warnings'][] = [
+                            'index' => $index,
+                            'history_index' => $historyIndex,
+                            'message' => "找不到口罩: {$history['maskName']} (藥局: {$history['pharmacyName']})"
+                        ];
+                    }
                 }
             }
         }
-
-        return [
-            'success' => $success,
-            'failed' => $failed
-        ];
     }
 
-    protected function getValidator($type, $data)
+    protected function validateMask(array $data, int $index)
     {
-        $rules = [
-            'pharmacy' => [
-                'name' => 'required|string|max:255',
-                'cashBalance' => 'required|numeric|min:0',
-                'openingHours' => 'required|string',
-                'masks' => 'required|array',
-                'masks.*.name' => 'required|string|max:255',
-                'masks.*.price' => 'required|numeric|min:0'
-            ],
-            'user' => [
-                'name' => 'required|string|max:255',
-                'balance' => 'required|numeric|min:0'
-            ],
-            'mask' => [
-                'pharmacy_id' => 'required|exists:pharmacies,id',
-                'name' => 'required|string|max:255',
-                'price' => 'required|numeric|min:0',
-                'stock' => 'required|integer|min:0'
-            ],
-            'transaction' => [
-                'user_id' => 'required|exists:pharmacy_users,id',
-                'pharmacy_id' => 'required|exists:pharmacies,id',
-                'mask_id' => 'required|exists:masks,id',
-                'quantity' => 'required|integer|min:1',
-                'transaction_date' => 'required|date'
-            ]
-        ];
+        $validator = Validator::make($data, [
+            'pharmacy_id' => 'required|exists:pharmacies,id',
+            'name' => 'required|string|max:255',
+            'price' => 'required|numeric|min:0',
+            'stock' => 'required|integer|min:0'
+        ]);
 
-        return Validator::make($data, $rules[$type]);
+        if ($validator->fails()) {
+            throw new \Exception("口罩資料驗證失敗: " . json_encode($validator->errors()->toArray(), JSON_UNESCAPED_UNICODE));
+        }
     }
 
-    protected function importItem($type, $item)
+    protected function validateTransaction(array $data, int $index)
+    {
+        $validator = Validator::make($data, [
+            'user_id' => 'required|exists:pharmacy_users,id',
+            'pharmacy_id' => 'required|exists:pharmacies,id',
+            'mask_id' => 'required|exists:masks,id',
+            'quantity' => 'required|integer|min:1',
+            'transaction_date' => 'required|date'
+        ]);
+
+        if ($validator->fails()) {
+            throw new \Exception("交易資料驗證失敗: " . json_encode($validator->errors()->toArray(), JSON_UNESCAPED_UNICODE));
+        }
+    }
+
+    protected function validateOpeningHours(string $openingHours): bool
+    {
+        $periods = explode(' / ', $openingHours);
+        foreach ($periods as $period) {
+            // 檢查連續日期格式 (Mon - Fri 08:00 - 17:00)
+            if (preg_match('/^([A-Za-z]+)\s*-\s*([A-Za-z]+)\s+(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})$/', $period)) {
+                continue;
+            }
+            // 檢查不連續日期格式 (Mon, Wed, Fri 08:00 - 12:00)
+            if (preg_match('/^([A-Za-z]+(?:,\s*[A-Za-z]+)*)\s+(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})$/', $period)) {
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    protected function importItem(string $type, array $item, bool $force)
     {
         switch ($type) {
             case 'pharmacy':
-                $this->importPharmacy($item);
+                $this->importPharmacy($item, $force);
                 break;
             case 'user':
-                $this->importUser($item);
+                $this->importUser($item, $force);
                 break;
             case 'mask':
                 $this->importMask($item);
@@ -171,25 +304,20 @@ class ImportDataCommand extends Command
         }
     }
 
-    protected function importPharmacy($data)
+    protected function importPharmacy(array $data, bool $force)
     {
-        $pharmacy = Pharmacy::create([
-            'name' => $data['name'],
-            'cash_balance' => $data['cashBalance']
-        ]);
+        $pharmacy = Pharmacy::updateOrCreate(
+            ['name' => $data['name']],
+            ['cash_balance' => $data['cashBalance']]
+        );
 
-        // 解析營業時間字串
-        $openingHours = $this->parseOpeningHours($data['openingHours']);
-        foreach ($openingHours as $hour) {
-            OpeningHour::create([
-                'pharmacy_id' => $pharmacy->id,
-                'day_of_week' => $hour['day_of_week'],
-                'open_time' => $hour['open_time'],
-                'close_time' => $hour['close_time']
-            ]);
+        if ($force) {
+            $pharmacy->openingHours()->delete();
+            $pharmacy->masks()->delete();
         }
 
-        // 匯入口罩資料
+        $this->processOpeningHours($pharmacy, $data['openingHours']);
+
         foreach ($data['masks'] as $maskData) {
             Mask::create([
                 'pharmacy_id' => $pharmacy->id,
@@ -200,82 +328,42 @@ class ImportDataCommand extends Command
         }
     }
 
-    protected function parseOpeningHours($openingHoursStr)
+    protected function importUser(array $data, bool $force)
     {
-        $result = [];
-        $parts = explode('/', $openingHoursStr);
+        $user = PharmacyUser::updateOrCreate(
+            ['name' => $data['name']],
+            ['cash_balance' => $data['cashBalance']]
+        );
 
-        foreach ($parts as $part) {
-            $part = trim($part);
-            if (preg_match('/([A-Za-z,\s-]+)\s+(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/', $part, $matches)) {
-                $days = $this->parseDays($matches[1]);
-                $openTime = $matches[2];
-                $closeTime = $matches[3];
-
-                // 處理跨日的情況
-                if (strtotime($closeTime) < strtotime($openTime)) {
-                    // 如果結束時間小於開始時間，表示跨日
-                    $closeTime = date('H:i:s', strtotime($closeTime . ' +1 day'));
-                } else {
-                    // 確保時間格式為 HH:MM:SS
-                    $openTime = date('H:i:s', strtotime($openTime));
-                    $closeTime = date('H:i:s', strtotime($closeTime));
-                }
-
-                foreach ($days as $day) {
-                    $result[] = [
-                        'day_of_week' => $this->convertDayOfWeek($day),
-                        'open_time' => $openTime,
-                        'close_time' => $closeTime
-                    ];
-                }
-            }
+        if ($force) {
+            $user->transactions()->delete();
         }
 
-        return $result;
-    }
-
-    protected function parseDays($daysStr)
-    {
-        $days = [];
-        $parts = explode(',', $daysStr);
-
-        foreach ($parts as $part) {
-            $part = trim($part);
-            if (strpos($part, '-') !== false) {
-                // 處理範圍，例如 "Mon - Fri"
-                list($start, $end) = explode('-', $part);
-                $start = trim($start);
-                $end = trim($end);
-                $startIndex = array_search($start, $this->weekDays);
-                $endIndex = array_search($end, $this->weekDays);
-
-                if ($startIndex !== false && $endIndex !== false) {
-                    for ($i = $startIndex; $i <= $endIndex; $i++) {
-                        $days[] = $this->weekDays[$i];
-                    }
-                }
-            } else {
-                // 單一日期
-                $day = trim($part);
-                if (in_array($day, $this->weekDays)) {
-                    $days[] = $day;
-                }
+        foreach ($data['purchaseHistories'] as $history) {
+            $pharmacy = Pharmacy::where('name', $history['pharmacyName'])->first();
+            if (!$pharmacy) {
+                continue;
             }
+
+            $mask = Mask::where('pharmacy_id', $pharmacy->id)
+                ->where('name', $history['maskName'])
+                ->first();
+            if (!$mask) {
+                continue;
+            }
+
+            Transaction::create([
+                'user_id' => $user->id,
+                'pharmacy_id' => $pharmacy->id,
+                'mask_id' => $mask->id,
+                'quantity' => 1, // 預設數量
+                'amount' => $history['transactionAmount'],
+                'transaction_date' => Carbon::parse($history['transactionDate'])
+            ]);
         }
-
-        return $days;
     }
 
-    protected function importUser($data)
-    {
-        PharmacyUser::create([
-            'name' => $data['name'],
-            'balance' => $data['balance']
-        ]);
-    }
-
-    protected function importMask($data)
+    protected function importMask(array $data)
     {
         Mask::create([
             'pharmacy_id' => $data['pharmacy_id'],
@@ -285,7 +373,7 @@ class ImportDataCommand extends Command
         ]);
     }
 
-    protected function importTransaction($data)
+    protected function importTransaction(array $data)
     {
         Transaction::create([
             'user_id' => $data['user_id'],
@@ -297,18 +385,108 @@ class ImportDataCommand extends Command
         ]);
     }
 
-    protected function convertDayOfWeek($day)
+    private function processOpeningHours(Pharmacy $pharmacy, string $openingHours): void
     {
-        $index = array_search($day, $this->weekDays);
-        if ($index === false) {
-            throw new \Exception("無效的星期幾：{$day}");
+        // 先刪除現有的營業時間
+        $pharmacy->openingHours()->delete();
+
+        // 解析營業時間字串
+        $parts = explode('/', $openingHours);
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if (empty($part)) continue;
+
+            // 解析日期和時間
+            if (preg_match('/^([^0-9]+)\s+(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})$/', $part, $matches)) {
+                $days = trim($matches[1]);
+                $openTime = $matches[2];
+                $closeTime = $matches[3];
+
+                // 處理日期範圍
+                if (strpos($days, '-') !== false) {
+                    // 處理連續日期範圍 (例如: Mon - Fri)
+                    list($startDay, $endDay) = array_map('trim', explode('-', $days));
+                    $startDayIndex = $this->getDayIndex($startDay);
+                    $endDayIndex = $this->getDayIndex($endDay);
+                    
+                    if ($startDayIndex !== null && $endDayIndex !== null) {
+                        for ($i = $startDayIndex; $i <= $endDayIndex; $i++) {
+                            $this->createOpeningHour($pharmacy, $i, $openTime, $closeTime);
+                        }
+                    }
+                } else {
+                    // 處理不連續日期 (例如: Mon, Wed, Fri)
+                    $days = array_map('trim', explode(',', $days));
+                    foreach ($days as $day) {
+                        $dayIndex = $this->getDayIndex($day);
+                        if ($dayIndex !== null) {
+                            $this->createOpeningHour($pharmacy, $dayIndex, $openTime, $closeTime);
+                        }
+                    }
+                }
+            }
         }
-        return $index; // 直接返回 0-6 的索引
     }
 
-    protected function calculateTransactionAmount($data)
+    private function createOpeningHour(Pharmacy $pharmacy, int $dayIndex, string $openTime, string $closeTime): void
+    {
+        // 檢查是否已存在相同的營業時間記錄
+        $exists = $pharmacy->openingHours()
+            ->where('day_of_week', $dayIndex)
+            ->where('open_time', $openTime)
+            ->where('close_time', $closeTime)
+            ->exists();
+
+        if (!$exists) {
+            $pharmacy->openingHours()->create([
+                'day_of_week' => $dayIndex,
+                'open_time' => $openTime,
+                'close_time' => $closeTime
+            ]);
+        }
+    }
+
+    protected function calculateTransactionAmount(array $data): float
     {
         $mask = Mask::findOrFail($data['mask_id']);
         return $mask->price * $data['quantity'];
+    }
+
+    protected function showValidationReport()
+    {
+        $this->info("\n驗證報告：");
+        $this->info("總筆數: {$this->stats['total']}");
+        $this->info("成功: {$this->stats['success']}");
+        $this->info("失敗: {$this->stats['failed']}");
+
+        if (!empty($this->stats['errors'])) {
+            $this->error("\n錯誤：");
+            foreach ($this->stats['errors'] as $error) {
+                $this->error("第 {$error['index']} 筆: {$error['error']}");
+            }
+        }
+
+        if (!empty($this->stats['warnings'])) {
+            $this->warn("\n警告：");
+            foreach ($this->stats['warnings'] as $warning) {
+                $this->warn("第 {$warning['index']} 筆: {$warning['message']}");
+            }
+        }
+    }
+
+    private function getDayIndex(string $day): ?int
+    {
+        $dayMap = [
+            'Mon' => 0,
+            'Tue' => 1,
+            'Wed' => 2,
+            'Thu' => 3,
+            'Fri' => 4,
+            'Sat' => 5,
+            'Sun' => 6
+        ];
+
+        $day = trim($day);
+        return $dayMap[$day] ?? null;
     }
 } 
