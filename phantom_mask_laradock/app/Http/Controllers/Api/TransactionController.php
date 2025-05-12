@@ -10,6 +10,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * @OA\Tag(
+ *     name="交易",
+ *     description="交易相關 API"
+ * )
+ */
 class TransactionController extends Controller
 {
     protected $transactionService;
@@ -20,7 +26,88 @@ class TransactionController extends Controller
     }
 
     /**
-     * 取得交易列表
+     * @OA\Get(
+     *     path="/api/transactions",
+     *     summary="取得交易列表",
+     *     tags={"交易"},
+     *     @OA\Parameter(
+     *         name="user_id",
+     *         in="query",
+     *         description="用戶ID",
+     *         required=false,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Parameter(
+     *         name="start_date",
+     *         in="query",
+     *         description="開始日期",
+     *         required=false,
+     *         @OA\Schema(type="string", format="date")
+     *     ),
+     *     @OA\Parameter(
+     *         name="end_date",
+     *         in="query",
+     *         description="結束日期",
+     *         required=false,
+     *         @OA\Schema(type="string", format="date")
+     *     ),
+     *     @OA\Parameter(
+     *         name="sort_order",
+     *         in="query",
+     *         description="排序方式 (asc/desc)",
+     *         required=false,
+     *         @OA\Schema(type="string", enum={"asc", "desc"})
+     *     ),
+     *     @OA\Parameter(
+     *         name="per_page",
+     *         in="query",
+     *         description="每頁筆數",
+     *         required=false,
+     *         @OA\Schema(type="integer", default=15)
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="成功取得交易列表",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="array",
+     *                 @OA\Items(
+     *                     @OA\Property(property="id", type="integer", example=1),
+     *                     @OA\Property(property="amount", type="number", format="float", example=50.25),
+     *                     @OA\Property(property="transaction_date", type="string", format="date-time"),
+     *                     @OA\Property(
+     *                         property="user",
+     *                         type="object",
+     *                         @OA\Property(property="id", type="integer", example=1),
+     *                         @OA\Property(property="name", type="string", example="John Doe")
+     *                     ),
+     *                     @OA\Property(
+     *                         property="pharmacy",
+     *                         type="object",
+     *                         @OA\Property(property="id", type="integer", example=1),
+     *                         @OA\Property(property="name", type="string", example="DFW Wellness")
+     *                     ),
+     *                     @OA\Property(
+     *                         property="mask",
+     *                         type="object",
+     *                         @OA\Property(property="id", type="integer", example=1),
+     *                         @OA\Property(property="name", type="string", example="True Barrier (green) (3 per pack)")
+     *                     )
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="驗證錯誤"
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="伺服器錯誤"
+     *     )
+     * )
      */
     public function index(Request $request)
     {
@@ -66,7 +153,58 @@ class TransactionController extends Controller
     }
 
     /**
-     * 取得單筆交易
+     * @OA\Get(
+     *     path="/api/transactions/{id}",
+     *     summary="取得單筆交易",
+     *     tags={"交易"},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="交易ID",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="成功取得交易資訊",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="id", type="integer", example=1),
+     *                 @OA\Property(property="amount", type="number", format="float", example=50.25),
+     *                 @OA\Property(property="transaction_date", type="string", format="date-time"),
+     *                 @OA\Property(
+     *                     property="user",
+     *                     type="object",
+     *                     @OA\Property(property="id", type="integer", example=1),
+     *                     @OA\Property(property="name", type="string", example="John Doe")
+     *                 ),
+     *                 @OA\Property(
+     *                     property="pharmacy",
+     *                     type="object",
+     *                     @OA\Property(property="id", type="integer", example=1),
+     *                     @OA\Property(property="name", type="string", example="DFW Wellness")
+     *                 ),
+     *                 @OA\Property(
+     *                     property="mask",
+     *                     type="object",
+     *                     @OA\Property(property="id", type="integer", example=1),
+     *                     @OA\Property(property="name", type="string", example="True Barrier (green) (3 per pack)")
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="交易不存在"
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="伺服器錯誤"
+     *     )
+     * )
      */
     public function show($id)
     {
@@ -80,7 +218,44 @@ class TransactionController extends Controller
     }
 
     /**
-     * 建立交易
+     * @OA\Post(
+     *     path="/api/transactions",
+     *     summary="建立交易",
+     *     tags={"交易"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"user_id", "pharmacy_id", "mask_id", "quantity"},
+     *             @OA\Property(property="user_id", type="integer", example=1),
+     *             @OA\Property(property="pharmacy_id", type="integer", example=1),
+     *             @OA\Property(property="mask_id", type="integer", example=1),
+     *             @OA\Property(property="quantity", type="integer", example=1)
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=201,
+     *         description="交易建立成功",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="交易建立成功"),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="id", type="integer", example=1),
+     *                 @OA\Property(property="amount", type="number", format="float", example=50.25),
+     *                 @OA\Property(property="transaction_date", type="string", format="date-time")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="驗證錯誤"
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="伺服器錯誤"
+     *     )
+     * )
      */
     public function store(TransactionRequest $request)
     {
