@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -27,14 +28,25 @@ return new class extends Migration
                   ->constrained()
                   ->onDelete('cascade')
                   ->comment('關聯的藥局ID');
-            $table->string('day_of_week', 10)
-                  ->comment('星期幾，例如：Mon, Tue, Wed 等');
+            $table->tinyInteger('day_of_week')
+                  ->comment('星期幾 (0-6)');
             $table->time('open_time')
                   ->comment('開始營業時間');
             $table->time('close_time')
                   ->comment('結束營業時間');
             $table->timestamps();
+            
+            // 新增索引
+            $table->index(['pharmacy_id', 'day_of_week']);
+            $table->index(['day_of_week', 'open_time', 'close_time']);
+            
+            // 新增唯一約束，確保同一藥局在同一天不會有重複的營業時間
+            $table->unique(['pharmacy_id', 'day_of_week', 'open_time', 'close_time'], 'opening_hours_unique');
         });
+
+        // 使用原生 SQL 添加約束
+        DB::statement('ALTER TABLE opening_hours ADD CONSTRAINT chk_day_of_week CHECK (day_of_week >= 0 AND day_of_week <= 6)');
+        DB::statement('ALTER TABLE opening_hours ADD CONSTRAINT chk_time CHECK (open_time < close_time)');
     }
 
     public function down()

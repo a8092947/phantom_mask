@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -35,8 +36,20 @@ return new class extends Migration
                   ->comment('口罩產品名稱，包含品牌、顏色、包裝數量等資訊');
             $table->decimal('price', 10, 2)
                   ->comment('口罩產品價格');
+            $table->integer('stock')
+                  ->default(0)
+                  ->comment('庫存數量');
             $table->timestamps();
+            
+            // 新增索引
+            $table->index(['pharmacy_id', 'name']);
+            $table->index('price');
+            $table->index('stock');
         });
+
+        // 使用原生 SQL 添加約束
+        DB::statement('ALTER TABLE masks ADD CONSTRAINT chk_mask_price CHECK (price >= 0)');
+        DB::statement('ALTER TABLE masks ADD CONSTRAINT chk_mask_stock CHECK (stock >= 0)');
     }
 
     public function down()

@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -47,12 +48,27 @@ return new class extends Migration
                   ->constrained('masks')
                   ->onDelete('cascade')
                   ->comment('關聯的口罩產品ID');
-            $table->decimal('transaction_amount', 10, 2)
+            $table->decimal('amount', 10, 2)
                   ->comment('交易金額');
+            $table->integer('quantity')
+                  ->default(1)
+                  ->comment('購買數量');
             $table->timestamp('transaction_date')
+                  ->useCurrent()
                   ->comment('交易時間');
             $table->timestamps();
+            
+            // 新增索引
+            $table->index(['user_id', 'transaction_date']);
+            $table->index(['pharmacy_id', 'transaction_date']);
+            $table->index(['mask_id', 'transaction_date']);
+            $table->index('amount');
+            $table->index('quantity');
         });
+
+        // 使用原生 SQL 添加約束
+        DB::statement('ALTER TABLE transactions ADD CONSTRAINT chk_transaction_amount CHECK (amount >= 0)');
+        DB::statement('ALTER TABLE transactions ADD CONSTRAINT chk_transaction_quantity CHECK (quantity > 0)');
     }
 
     public function down()

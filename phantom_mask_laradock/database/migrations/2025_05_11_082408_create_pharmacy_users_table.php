@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -33,12 +34,19 @@ return new class extends Migration
     {
         Schema::create('pharmacy_users', function (Blueprint $table) {
             $table->id()->comment('用戶唯一識別碼');
-            $table->string('name')->comment('用戶姓名');
+            $table->string('name')->unique()->comment('用戶姓名');
             $table->decimal('cash_balance', 10, 2)
                   ->default(0)
                   ->comment('用戶現金餘額，用於追蹤用戶的消費');
             $table->timestamps();
+            
+            // 新增索引
+            $table->index('name');
+            $table->index('cash_balance');
         });
+
+        // 使用原生 SQL 添加約束
+        DB::statement('ALTER TABLE pharmacy_users ADD CONSTRAINT chk_user_cash_balance CHECK (cash_balance >= 0)');
     }
 
     public function down()

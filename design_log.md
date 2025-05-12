@@ -275,3 +275,153 @@
 5. 優化錯誤處理機制
 6. 改進資料驗證規則
 7. 更新使用文件
+
+
+## 7. API 實作
+
+### 7.1 API 路由設計
+1. 藥局相關
+   - GET /api/pharmacies - 列出所有藥局
+   - GET /api/pharmacies/{id} - 顯示指定藥局詳細資訊
+
+2. 口罩相關
+   - GET /api/masks - 列出所有口罩
+   - GET /api/masks/{id} - 顯示指定口罩詳細資訊
+
+3. 用戶相關
+   - GET /api/users - 列出所有用戶
+   - GET /api/users/{id} - 顯示指定用戶詳細資訊
+   - GET /api/users/top - 列出交易金額最高的用戶
+
+4. 交易相關
+   - GET /api/transactions - 列出所有交易
+   - GET /api/transactions/stats - 顯示交易統計
+   - POST /api/transactions - 建立新交易
+
+### 7.2 系統變更記錄
+
+#### 7.2.1 2024-05-12
+1. 建立 API 控制器
+   - PharmacyController
+   - MaskController
+   - UserController
+   - TransactionController
+
+2. 實作基本 API 路由
+   - 設定 RESTful 路由
+   - 加入路由群組
+   - 實作基本查詢功能
+
+3. 實作藥局查詢功能
+   - 支援時間和星期幾篩選
+   - 支援價格範圍篩選
+   - 支援口罩數量篩選
+   - 支援名稱搜尋
+
+
+#### 7.2.2 2024-05-12
+1. 實作口罩查詢功能
+   - 支援按藥局篩選
+   - 支援價格範圍篩選
+   - 支援名稱搜尋
+   - 支援按名稱或價格排序
+   - 實作相關性排序搜尋
+
+2. 功能說明
+   - 列表查詢支援多種篩選條件
+   - 搜尋功能支援相關性排序
+   - 詳細資訊查詢包含關聯資料
+
+3. 使用範例
+   ```bash
+   # 列出所有口罩
+   GET /api/masks
+
+   # 列出指定藥局的口罩，按價格排序
+   GET /api/masks?pharmacy_id=1&sort_by=price&sort_order=desc
+
+   # 搜尋口罩
+   GET /api/masks/search?q=green
+   ```
+
+4. 注意事項
+   - 搜尋結果按相關性排序
+   - 支援分頁功能
+   - 包含關聯資料
+
+
+#### 7.2.3 2024-05-12
+1. 實作用戶查詢功能
+   - 支援用戶列表查詢
+   - 支援用戶詳細資訊查詢
+   - 支援用戶搜尋
+   - 實作交易金額排名功能
+
+2. 功能說明
+   - 列表查詢支援多種篩選條件
+   - 詳細資訊包含交易統計
+   - 排名功能支援日期範圍篩選
+   - 搜尋功能支援相關性排序
+
+3. 使用範例
+   ```bash
+   # 列出所有用戶
+   GET /api/users
+
+   # 查看用戶詳細資訊
+   GET /api/users/1
+
+   # 查看交易金額排名
+   GET /api/users/top?limit=5&start_date=2024-01-01&end_date=2024-12-31
+
+   # 搜尋用戶
+   GET /api/users/search?q=john
+   ```
+
+4. 注意事項
+   - 排名功能預設顯示前 10 名
+   - 支援按日期範圍篩選排名
+   - 詳細資訊包含交易統計資料
+   - 搜尋結果按相關性排序
+
+
+#### 7.2.4 2024-05-12
+1. 實作交易相關功能
+   - 支援交易列表查詢
+   - 支援交易詳細資訊查詢
+   - 實作交易統計功能
+   - 實作新增交易功能
+
+2. 功能說明
+   - 列表查詢支援多種篩選條件
+   - 統計功能包含總金額、次數、平均值
+   - 支援每日交易統計
+   - 支援藥局交易統計
+   - 新增交易時進行多重驗證
+
+3. 使用範例
+   ```bash
+   # 列出所有交易
+   GET /api/transactions
+
+   # 查看交易詳細資訊
+   GET /api/transactions/1
+
+   # 查看交易統計
+   GET /api/transactions/stats?start_date=2024-01-01&end_date=2024-12-31
+
+   # 新增交易
+   POST /api/transactions
+   {
+       "user_id": 1,
+       "pharmacy_id": 1,
+       "mask_id": 1,
+       "amount": 100
+   }
+   ```
+
+4. 注意事項
+   - 新增交易時會驗證口罩歸屬
+   - 新增交易時會驗證價格
+   - 統計功能支援日期範圍篩選
+   - 支援按多種條件排序
