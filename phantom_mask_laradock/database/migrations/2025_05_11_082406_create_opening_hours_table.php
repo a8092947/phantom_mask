@@ -46,7 +46,6 @@ return new class extends Migration
 
         // 使用原生 SQL 添加約束
         DB::statement('ALTER TABLE opening_hours ADD CONSTRAINT chk_day_of_week CHECK (day_of_week >= 0 AND day_of_week <= 6)');
-        DB::statement('ALTER TABLE opening_hours ADD CONSTRAINT chk_time CHECK (open_time < close_time)');
     }
 
     public function down()
