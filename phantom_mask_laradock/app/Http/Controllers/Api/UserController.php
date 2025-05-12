@@ -3,27 +3,24 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\UserRequest;
+use App\Http\Requests\UserTopRequest;
+use App\Http\Requests\UserSearchRequest;
 use App\Models\PharmacyUser;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
-    public function index(Request $request)
+    public function index(UserRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'sort_order' => 'nullable|in:asc,desc',
-            'per_page' => 'nullable|integer|min:1|max:100'
-        ]);
-        if ($validator->fails()) {
-            return $this->error('驗證失敗', $validator->errors(), 422);
-        }
+        $validated = $request->validated();
         try {
             $users = PharmacyUser::query()
-                ->orderByBalance($request->get('sort_order', 'desc'))
-                ->paginate($request->get('per_page', 15));
+                ->orderByBalance($validated['sort_order'] ?? 'desc')
+                ->paginate($validated['per_page'] ?? 15);
             return $this->success($users);
         } catch (\Exception $e) {
+            Log::error('User index failed', ['error' => $e->getMessage()]);
             return $this->error('查詢失敗：' . $e->getMessage());
         }
     }
@@ -35,51 +32,41 @@ class UserController extends Controller
                 ->findOrFail($id);
             return $this->success($user);
         } catch (\Exception $e) {
+            Log::error('User show failed', ['id' => $id, 'error' => $e->getMessage()]);
             return $this->error('查詢失敗：' . $e->getMessage());
         }
     }
 
-    public function top(Request $request)
+    public function top(UserTopRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'limit' => 'nullable|integer|min:1|max:100',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date|after_or_equal:start_date'
-        ]);
-        if ($validator->fails()) {
-            return $this->error('驗證失敗', $validator->errors(), 422);
-        }
+        $validated = $request->validated();
         try {
             $users = PharmacyUser::query()
                 ->topSpenders(
-                    $request->get('limit', 10),
-                    $request->get('start_date'),
-                    $request->get('end_date')
+                    $validated['limit'] ?? 10,
+                    $validated['start_date'] ?? null,
+                    $validated['end_date'] ?? null
                 )
                 ->get();
             return $this->success($users);
         } catch (\Exception $e) {
+            Log::error('User top failed', ['error' => $e->getMessage()]);
             return $this->error('查詢失敗：' . $e->getMessage());
         }
     }
 
-    public function search(Request $request)
+    public function search(UserSearchRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'q' => 'required|string|max:255',
-            'per_page' => 'nullable|integer|min:1|max:100'
-        ]);
-        if ($validator->fails()) {
-            return $this->error('驗證失敗', $validator->errors(), 422);
-        }
-        $search = $request->get('q');
+        $validated = $request->validated();
+        $search = $validated['q'];
         try {
             $users = PharmacyUser::query()
                 ->search($search)
                 ->orderBy('name')
-                ->paginate($request->get('per_page', 15));
+                ->paginate($validated['per_page'] ?? 15);
             return $this->success($users);
         } catch (\Exception $e) {
+            Log::error('User search failed', ['error' => $e->getMessage()]);
             return $this->error('查詢失敗：' . $e->getMessage());
         }
     }

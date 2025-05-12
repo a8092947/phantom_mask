@@ -3,31 +3,26 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\MaskRequest;
+use App\Http\Requests\MaskSearchRequest;
 use App\Models\Mask;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
 
 class MaskController extends Controller
 {
-    public function index(Request $request)
+    public function index(MaskRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'pharmacy_id' => 'nullable|integer|exists:pharmacies,id',
-            'sort_order' => 'nullable|in:asc,desc',
-            'per_page' => 'nullable|integer|min:1|max:100'
-        ]);
-        if ($validator->fails()) {
-            return $this->error('驗證失敗', $validator->errors(), 422);
-        }
+        $validated = $request->validated();
         try {
             $masks = Mask::query()
-                ->pharmacy($request->pharmacy_id)
+                ->pharmacy($validated['pharmacy_id'] ?? null)
                 ->inStock()
-                ->orderByPrice($request->get('sort_order', 'asc'))
+                ->orderByPrice($validated['sort_order'] ?? 'asc')
                 ->with('pharmacy')
-                ->paginate($request->get('per_page', 15));
+                ->paginate($validated['per_page'] ?? 15);
             return $this->success($masks);
         } catch (\Exception $e) {
+            Log::error('Mask index failed', ['error' => $e->getMessage()]);
             return $this->error('查詢失敗：' . $e->getMessage());
         }
     }
@@ -38,28 +33,25 @@ class MaskController extends Controller
             $mask = Mask::with('pharmacy')->findOrFail($id);
             return $this->success($mask);
         } catch (\Exception $e) {
+            Log::error('Mask show failed', ['id' => $id, 'error' => $e->getMessage()]);
             return $this->error('查詢失敗：' . $e->getMessage());
         }
     }
 
-    public function search(Request $request)
+    public function search(MaskSearchRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'q' => 'required|string|max:255',
-            'per_page' => 'nullable|integer|min:1|max:100'
-        ]);
-        if ($validator->fails()) {
-            return $this->error('驗證失敗', $validator->errors(), 422);
-        }
-        $search = $request->get('q');
+        $validated = $request->validated();
+        $search = $validated['q'];
         try {
             $masks = Mask::query()
                 ->search($search)
                 ->with('pharmacy')
                 ->orderBy('name')
-                ->paginate($request->get('per_page', 15));
+                ->orderBy('name')
+                ->paginate($validated['per_page'] ?? 15);
             return $this->success($masks);
         } catch (\Exception $e) {
+            Log::error('Mask search failed', ['error' => $e->getMessage()]);
             return $this->error('查詢失敗：' . $e->getMessage());
         }
     }

@@ -3,55 +3,73 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Pharmacy;
-use Illuminate\Http\Request;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Validator;
+use App\Http\Requests\PharmacyRequest;
+use App\Services\PharmacyService;
+use Illuminate\Support\Facades\Log;
 
 class PharmacyController extends Controller
 {
-    public function index(Request $request)
+    protected $pharmacyService;
+
+    public function __construct(PharmacyService $pharmacyService)
     {
-        $validator = Validator::make($request->all(), [
-            'time' => 'nullable|date_format:H:i',
-            'day_of_week' => 'nullable|integer|between:1,7',
-            'min_price' => 'nullable|numeric|min:0',
-            'max_price' => 'nullable|numeric|min:0|gte:min_price',
-            'per_page' => 'nullable|integer|min:1|max:100'
-        ]);
+        $this->pharmacyService = $pharmacyService;
+    }
 
-        if ($validator->fails()) {
-            return $this->error('驗證失敗', $validator->errors(), 422);
-        }
-
+    /**
+     * 取得藥局列表
+     */
+    public function index(PharmacyRequest $request)
+    {
         try {
-            $pharmacies = Pharmacy::query()
-                ->when($request->time && $request->day_of_week, function ($query) use ($request) {
-                    $dateTime = Carbon::parse($request->time);
-                    $dateTime->setDayOfWeek($request->day_of_week);
-                    return $query->openAt($dateTime);
-                })
-                ->when($request->min_price || $request->max_price, function ($query) use ($request) {
-                    return $query->priceRange($request->min_price, $request->max_price);
-                })
-                ->with(['openingHours', 'masks'])
-                ->paginate($request->get('per_page', 15));
-
+            $validated = $request->validated();
+            $pharmacies = $this->pharmacyService->getOpenPharmacies(
+                $validated['time'] ?? null,
+                $validated['day_of_week'] ?? null,
+                $validated['min_price'] ?? null,
+                $validated['max_price'] ?? null
+            );
             return $this->success($pharmacies);
         } catch (\Exception $e) {
-            return $this->error('查詢失敗：' . $e->getMessage());
+            Log::error('Pharmacy index failed', ['error' => $e->getMessage()]);
+            return $this->error('取得藥局列表失敗', ['error' => $e->getMessage()], 500);
         }
     }
 
+    /**
+     * 取得單間藥局
+     */
     public function show($id)
     {
         try {
-            $pharmacy = Pharmacy::with(['openingHours', 'masks'])
-                ->findOrFail($id);
+            $pharmacy = $this->pharmacyService->getOpenPharmacies(null, null, null, null)
+                ->where('id', $id)
+                ->first();
+
+            if (!$pharmacy) {
+                Log::warning('Pharmacy not found', ['id' => $id]);
+                return $this->error('藥局不存在', null, 404);
+            }
 
             return $this->success($pharmacy);
         } catch (\Exception $e) {
-            return $this->error('查詢失敗：' . $e->getMessage());
+            Log::error('Pharmacy show failed', ['id' => $id, 'error' => $e->getMessage()]);
+            return $this->error('取得藥局失敗', ['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * 搜尋藥局
+     */
+    public function search(PharmacyRequest $request)
+    {
+        try {
+            $validated = $request->validated();
+            $pharmacies = $this->pharmacyService->searchPharmacies($validated['q']);
+            return $this->success($pharmacies);
+        } catch (\Exception $e) {
+            Log::error('Pharmacy search failed', ['error' => $e->getMessage()]);
+            return $this->error('搜尋藥局失敗', ['error' => $e->getMessage()], 500);
         }
     }
 }
