@@ -9,6 +9,10 @@ use App\Services\TransactionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use App\Models\Mask;
+use App\Models\Pharmacy;
 
 /**
  * @OA\Tag(
@@ -27,47 +31,33 @@ class TransactionController extends Controller
 
     /**
      * @OA\Get(
-     *     path="/api/transactions",
-     *     summary="取得交易列表",
+     *     path="/api/transactions/top-users",
+     *     summary="查詢最高交易金額的使用者",
      *     tags={"交易"},
-     *     @OA\Parameter(
-     *         name="user_id",
-     *         in="query",
-     *         description="用戶ID",
-     *         required=false,
-     *         @OA\Schema(type="integer")
-     *     ),
      *     @OA\Parameter(
      *         name="start_date",
      *         in="query",
-     *         description="開始日期",
+     *         description="開始日期 (YYYY-MM-DD)",
      *         required=false,
      *         @OA\Schema(type="string", format="date")
      *     ),
      *     @OA\Parameter(
      *         name="end_date",
      *         in="query",
-     *         description="結束日期",
+     *         description="結束日期 (YYYY-MM-DD)",
      *         required=false,
      *         @OA\Schema(type="string", format="date")
      *     ),
      *     @OA\Parameter(
-     *         name="sort_order",
+     *         name="limit",
      *         in="query",
-     *         description="排序方式 (asc/desc)",
+     *         description="回傳筆數",
      *         required=false,
-     *         @OA\Schema(type="string", enum={"asc", "desc"})
-     *     ),
-     *     @OA\Parameter(
-     *         name="per_page",
-     *         in="query",
-     *         description="每頁筆數",
-     *         required=false,
-     *         @OA\Schema(type="integer", default=15)
+     *         @OA\Schema(type="integer", minimum=1)
      *     ),
      *     @OA\Response(
      *         response=200,
-     *         description="成功取得交易列表",
+     *         description="成功取得使用者列表",
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=true),
      *             @OA\Property(
@@ -75,25 +65,113 @@ class TransactionController extends Controller
      *                 type="array",
      *                 @OA\Items(
      *                     @OA\Property(property="id", type="integer", example=1),
-     *                     @OA\Property(property="amount", type="number", format="float", example=50.25),
-     *                     @OA\Property(property="transaction_date", type="string", format="date-time"),
-     *                     @OA\Property(
-     *                         property="user",
-     *                         type="object",
+     *                     @OA\Property(property="name", type="string", example="John Doe"),
+     *                     @OA\Property(property="cash_balance", type="number", format="float", example=1000.00),
+     *                     @OA\Property(property="total_amount", type="number", format="float", example=500.00)
+     *                 )
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="驗證錯誤"
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="伺服器錯誤"
+     *     )
+     * )
+     */
+    public function topUsers(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'start_date' => 'nullable|date',
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'limit' => 'nullable|integer|min:1'
+        ]);
+
+        if ($validator->fails()) {
+            Log::warning('Transaction topUsers validation failed', ['errors' => $validator->errors()]);
+            return $this->error('驗證失敗', $validator->errors(), 422);
+        }
+
+        try {
+            $query = User::withSum('transactions as total_amount', 'amount')
+                ->orderByDesc('total_amount');
+
+            if ($request->has('start_date')) {
+                $query->whereHas('transactions', function ($q) use ($request) {
+                    $q->where('created_at', '>=', $request->start_date);
+                });
+            }
+
+            if ($request->has('end_date')) {
+                $query->whereHas('transactions', function ($q) use ($request) {
+                    $q->where('created_at', '<=', $request->end_date);
+                });
+            }
+
+            if ($request->has('limit')) {
+                $users = $query->limit($request->limit)->get();
+            } else {
+                $users = $query->get();
+            }
+
+            return $this->success($users);
+        } catch (\Exception $e) {
+            Log::error('Transaction topUsers failed', ['error' => $e->getMessage()]);
+            return $this->error('查詢最高交易金額的使用者失敗', ['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * @OA\Get(
+     *     path="/api/transactions/statistics",
+     *     summary="查詢交易統計",
+     *     tags={"交易"},
+     *     @OA\Parameter(
+     *         name="start_date",
+     *         in="query",
+     *         description="開始日期 (YYYY-MM-DD)",
+     *         required=false,
+     *         @OA\Schema(type="string", format="date")
+     *     ),
+     *     @OA\Parameter(
+     *         name="end_date",
+     *         in="query",
+     *         description="結束日期 (YYYY-MM-DD)",
+     *         required=false,
+     *         @OA\Schema(type="string", format="date")
+     *     ),
+     *     @OA\Parameter(
+     *         name="include_details",
+     *         in="query",
+     *         description="是否包含詳細交易資訊",
+     *         required=false,
+     *         @OA\Schema(type="boolean")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="成功取得交易統計",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(
+     *                 property="data",
+     *                 type="object",
+     *                 @OA\Property(property="total_transactions", type="integer", example=100),
+     *                 @OA\Property(property="total_amount", type="number", format="float", example=5000.00),
+     *                 @OA\Property(property="average_amount", type="number", format="float", example=50.00),
+     *                 @OA\Property(
+     *                     property="transactions",
+     *                     type="array",
+     *                     @OA\Items(
      *                         @OA\Property(property="id", type="integer", example=1),
-     *                         @OA\Property(property="name", type="string", example="John Doe")
-     *                     ),
-     *                     @OA\Property(
-     *                         property="pharmacy",
-     *                         type="object",
-     *                         @OA\Property(property="id", type="integer", example=1),
-     *                         @OA\Property(property="name", type="string", example="DFW Wellness")
-     *                     ),
-     *                     @OA\Property(
-     *                         property="mask",
-     *                         type="object",
-     *                         @OA\Property(property="id", type="integer", example=1),
-     *                         @OA\Property(property="name", type="string", example="True Barrier (green) (3 per pack)")
+     *                         @OA\Property(property="user_id", type="integer", example=1),
+     *                         @OA\Property(property="pharmacy_id", type="integer", example=1),
+     *                         @OA\Property(property="mask_id", type="integer", example=1),
+     *                         @OA\Property(property="quantity", type="integer", example=2),
+     *                         @OA\Property(property="amount", type="number", format="float", example=20.00),
+     *                         @OA\Property(property="created_at", type="string", format="date-time")
      *                     )
      *                 )
      *             )
@@ -109,118 +187,51 @@ class TransactionController extends Controller
      *     )
      * )
      */
-    public function index(Request $request)
+    public function statistics(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'user_id' => 'nullable|integer|exists:users,id',
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date|after_or_equal:start_date',
-            'sort_order' => 'nullable|in:asc,desc',
-            'per_page' => 'nullable|integer|min:1|max:100'
+            'include_details' => 'nullable|boolean'
         ]);
 
         if ($validator->fails()) {
-            Log::warning('Transaction index validation failed', ['errors' => $validator->errors()]);
+            Log::warning('Transaction statistics validation failed', ['errors' => $validator->errors()]);
             return $this->error('驗證失敗', $validator->errors(), 422);
         }
 
         try {
             $query = Transaction::query();
 
-            if ($request->has('user_id')) {
-                $query->where('user_id', $request->user_id);
-            }
-
             if ($request->has('start_date')) {
-                $query->where('transaction_date', '>=', $request->start_date);
+                $query->where('created_at', '>=', $request->start_date);
             }
 
             if ($request->has('end_date')) {
-                $query->where('transaction_date', '<=', $request->end_date);
+                $query->where('created_at', '<=', $request->end_date);
             }
 
-            $sortOrder = $request->get('sort_order', 'desc');
-            $query->orderBy('amount', $sortOrder);
+            $statistics = [
+                'total_transactions' => $query->count(),
+                'total_amount' => $query->sum('amount'),
+                'average_amount' => $query->avg('amount')
+            ];
 
-            $perPage = $request->get('per_page', 15);
-            $transactions = $query->with(['user', 'pharmacy', 'mask'])->paginate($perPage);
+            if ($request->boolean('include_details')) {
+                $statistics['transactions'] = $query->get();
+            }
 
-            return $this->success($transactions);
+            return $this->success($statistics);
         } catch (\Exception $e) {
-            Log::error('Transaction index failed', ['error' => $e->getMessage()]);
-            return $this->error('取得交易列表失敗', ['error' => $e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * @OA\Get(
-     *     path="/api/transactions/{id}",
-     *     summary="取得單筆交易",
-     *     tags={"交易"},
-     *     @OA\Parameter(
-     *         name="id",
-     *         in="path",
-     *         description="交易ID",
-     *         required=true,
-     *         @OA\Schema(type="integer")
-     *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="成功取得交易資訊",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(
-     *                 property="data",
-     *                 type="object",
-     *                 @OA\Property(property="id", type="integer", example=1),
-     *                 @OA\Property(property="amount", type="number", format="float", example=50.25),
-     *                 @OA\Property(property="transaction_date", type="string", format="date-time"),
-     *                 @OA\Property(
-     *                     property="user",
-     *                     type="object",
-     *                     @OA\Property(property="id", type="integer", example=1),
-     *                     @OA\Property(property="name", type="string", example="John Doe")
-     *                 ),
-     *                 @OA\Property(
-     *                     property="pharmacy",
-     *                     type="object",
-     *                     @OA\Property(property="id", type="integer", example=1),
-     *                     @OA\Property(property="name", type="string", example="DFW Wellness")
-     *                 ),
-     *                 @OA\Property(
-     *                     property="mask",
-     *                     type="object",
-     *                     @OA\Property(property="id", type="integer", example=1),
-     *                     @OA\Property(property="name", type="string", example="True Barrier (green) (3 per pack)")
-     *                 )
-     *             )
-     *         )
-     *     ),
-     *     @OA\Response(
-     *         response=404,
-     *         description="交易不存在"
-     *     ),
-     *     @OA\Response(
-     *         response=500,
-     *         description="伺服器錯誤"
-     *     )
-     * )
-     */
-    public function show($id)
-    {
-        try {
-            $transaction = Transaction::with(['user', 'pharmacy', 'mask'])->findOrFail($id);
-            return $this->success($transaction);
-        } catch (\Exception $e) {
-            Log::error('Transaction show failed', ['id' => $id, 'error' => $e->getMessage()]);
-            return $this->error('取得交易失敗', ['error' => $e->getMessage()], 404);
+            Log::error('Transaction statistics failed', ['error' => $e->getMessage()]);
+            return $this->error('查詢交易統計失敗', ['error' => $e->getMessage()], 500);
         }
     }
 
     /**
      * @OA\Post(
      *     path="/api/transactions",
-     *     summary="建立交易",
+     *     summary="處理使用者購買口罩",
      *     tags={"交易"},
      *     @OA\RequestBody(
      *         required=true,
@@ -229,21 +240,24 @@ class TransactionController extends Controller
      *             @OA\Property(property="user_id", type="integer", example=1),
      *             @OA\Property(property="pharmacy_id", type="integer", example=1),
      *             @OA\Property(property="mask_id", type="integer", example=1),
-     *             @OA\Property(property="quantity", type="integer", example=1)
+     *             @OA\Property(property="quantity", type="integer", minimum=1, example=2)
      *         )
      *     ),
      *     @OA\Response(
-     *         response=201,
-     *         description="交易建立成功",
+     *         response=200,
+     *         description="成功處理交易",
      *         @OA\JsonContent(
      *             @OA\Property(property="success", type="boolean", example=true),
-     *             @OA\Property(property="message", type="string", example="交易建立成功"),
      *             @OA\Property(
      *                 property="data",
      *                 type="object",
      *                 @OA\Property(property="id", type="integer", example=1),
-     *                 @OA\Property(property="amount", type="number", format="float", example=50.25),
-     *                 @OA\Property(property="transaction_date", type="string", format="date-time")
+     *                 @OA\Property(property="user_id", type="integer", example=1),
+     *                 @OA\Property(property="pharmacy_id", type="integer", example=1),
+     *                 @OA\Property(property="mask_id", type="integer", example=1),
+     *                 @OA\Property(property="quantity", type="integer", example=2),
+     *                 @OA\Property(property="amount", type="number", format="float", example=20.00),
+     *                 @OA\Property(property="created_at", type="string", format="date-time")
      *             )
      *         )
      *     ),
@@ -257,15 +271,53 @@ class TransactionController extends Controller
      *     )
      * )
      */
-    public function store(TransactionRequest $request)
+    public function store(Request $request)
     {
+        $validator = Validator::make($request->all(), [
+            'user_id' => 'required|exists:users,id',
+            'pharmacy_id' => 'required|exists:pharmacies,id',
+            'mask_id' => 'required|exists:masks,id',
+            'quantity' => 'required|integer|min:1'
+        ]);
+
+        if ($validator->fails()) {
+            Log::warning('Transaction store validation failed', ['errors' => $validator->errors()]);
+            return $this->error('驗證失敗', $validator->errors(), 422);
+        }
+
         try {
-            $transaction = $this->transactionService->processTransaction($request->validated());
-            Log::info('Transaction created', ['id' => $transaction->id]);
-            return $this->success($transaction, '交易建立成功', 201);
+            $transaction = DB::transaction(function () use ($request) {
+                // 檢查庫存
+                $mask = Mask::findOrFail($request->mask_id);
+                if ($mask->stock < $request->quantity) {
+                    throw new \Exception('庫存不足');
+                }
+
+                // 檢查使用者餘額
+                $user = User::findOrFail($request->user_id);
+                $totalAmount = $mask->price * $request->quantity;
+                if ($user->cash_balance < $totalAmount) {
+                    throw new \Exception('餘額不足');
+                }
+
+                // 更新庫存和餘額
+                $mask->decrement('stock', $request->quantity);
+                $user->decrement('cash_balance', $totalAmount);
+
+                // 建立交易記錄
+                return Transaction::create([
+                    'user_id' => $request->user_id,
+                    'pharmacy_id' => $request->pharmacy_id,
+                    'mask_id' => $request->mask_id,
+                    'quantity' => $request->quantity,
+                    'amount' => $totalAmount
+                ]);
+            });
+
+            return $this->success($transaction);
         } catch (\Exception $e) {
             Log::error('Transaction store failed', ['error' => $e->getMessage()]);
-            return $this->error('交易建立失敗', ['error' => $e->getMessage()], 422);
+            return $this->error('處理交易失敗', ['error' => $e->getMessage()], 500);
         }
     }
 }

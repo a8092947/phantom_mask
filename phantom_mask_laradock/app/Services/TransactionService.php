@@ -44,43 +44,29 @@ class TransactionService
                 throw new \Exception('使用者餘額不足');
             }
 
-            // 2. 檢查口罩庫存
-            $mask = Mask::where('id', $data['mask_id'])
-                ->where('pharmacy_id', $data['pharmacy_id'])
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            if ($mask->stock <= 0) {
-                throw new \Exception('口罩庫存不足');
-            }
-
-            // 3. 建立交易
+            // 2. 建立交易
             $transaction = $this->transactionRepository->create([
                 'user_id' => $data['user_id'],
                 'pharmacy_id' => $data['pharmacy_id'],
                 'mask_id' => $data['mask_id'],
                 'amount' => $data['amount'],
-                'quantity' => 1,
                 'transaction_date' => now(),
             ]);
 
-            // 4. 更新使用者餘額
+            // 3. 更新使用者餘額
             $this->userRepository->updateBalance($user->id, $user->cash_balance - $data['amount']);
 
-            // 5. 更新藥局餘額
+            // 4. 更新藥局餘額
             $pharmacy = Pharmacy::findOrFail($data['pharmacy_id']);
             $pharmacy->cash_balance += $data['amount'];
             $pharmacy->save();
 
-            // 6. 更新口罩庫存
-            $this->maskRepository->updateStock($mask->id, $mask->stock - 1);
-
-            // 7. 記錄交易日誌
+            // 5. 記錄交易日誌
             Log::info('交易完成', [
                 'transaction_id' => $transaction->id,
                 'user_id' => $user->id,
                 'pharmacy_id' => $pharmacy->id,
-                'mask_id' => $mask->id,
+                'mask_id' => $data['mask_id'],
                 'amount' => $data['amount']
             ]);
 

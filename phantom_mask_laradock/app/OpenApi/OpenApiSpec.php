@@ -19,22 +19,22 @@ namespace App\OpenApi;
  * 
  * @OA\Server(
  *     url="http://phantom_mask_laradock.kdan.succ.work",
+ *     description="Development API Server"
+ * )
+ * 
+ * @OA\Server(
+ *     url="http://localhost:8000",
+ *     description="Local Development Server"
+ * )
+ * 
+ * @OA\Server(
+ *     url="http://phantom_mask_laradock.kdan.succ.work",
  *     description="Production API Server"
  * )
  * 
  * @OA\Tag(
  *     name="藥局",
  *     description="藥局相關 API"
- * )
- * 
- * @OA\Tag(
- *     name="口罩",
- *     description="口罩相關 API"
- * )
- * 
- * @OA\Tag(
- *     name="使用者",
- *     description="使用者相關 API"
  * )
  * 
  * @OA\Tag(
