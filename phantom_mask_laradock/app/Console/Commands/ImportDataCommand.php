@@ -18,7 +18,8 @@ class ImportDataCommand extends Command
     protected $signature = 'import:data 
         {type : 要匯入的資料類型 (pharmacy/user)} 
         {file : JSON 檔案路徑}
-        {--commit : 實際寫入資料庫（預設只驗證）}';
+        {--commit : 實際寫入資料庫（預設只驗證）}
+        {--default-stock=100 : 口罩預設庫存數量}';
 
     protected $description = '匯入資料到資料庫（預設只驗證，需加 --commit 才會寫入）';
 
@@ -32,11 +33,40 @@ class ImportDataCommand extends Command
         'errors' => []
     ];
 
+    protected $defaultStock;
+
     public function handle()
     {
         $type = $this->argument('type');
         $file = $this->argument('file');
         $shouldCommit = $this->option('commit');
+        $this->defaultStock = $this->option('default-stock');
+
+        // 顯示執行參數
+        $this->info("\n執行參數：");
+        $this->info("資料類型: {$type}");
+        $this->info("資料檔案: {$file}");
+        $this->info("寫入模式: " . ($shouldCommit ? "是" : "否"));
+        if ($type === 'pharmacy') {
+            $this->info("預設庫存: {$this->defaultStock}");
+        }
+        $this->info("");
+
+        // 如果是藥局資料且要寫入，詢問預設庫存
+        if ($type === 'pharmacy' && $shouldCommit) {
+            $this->defaultStock = $this->ask('請輸入口罩預設庫存數量', $this->defaultStock);
+            
+            // 驗證輸入
+            while (!is_numeric($this->defaultStock) || $this->defaultStock < 0) {
+                $this->error('庫存數量必須是非負數！');
+                $this->defaultStock = $this->ask('請重新輸入口罩預設庫存數量', 100);
+            }
+
+            // 顯示更新後的參數
+            $this->info("\n更新後的參數：");
+            $this->info("預設庫存: {$this->defaultStock}");
+            $this->info("");
+        }
 
         try {
             // 檢查資料類型
@@ -143,7 +173,7 @@ class ImportDataCommand extends Command
         // 基本欄位驗證
         $validator = Validator::make($data, [
             'name' => 'required',
-            'cashBalance' => 'required|numeric',
+            'cashBalance' => 'required|numeric|min:0',
             'openingHours' => 'required',
             'masks' => 'required|array'
         ]);
@@ -161,7 +191,7 @@ class ImportDataCommand extends Command
         foreach ($data['masks'] as $mask) {
             $maskValidator = Validator::make($mask, [
                 'name' => 'required',
-                'price' => 'required|numeric'
+                'price' => 'required|numeric|min:0'
             ]);
 
             if ($maskValidator->fails()) {
@@ -175,7 +205,7 @@ class ImportDataCommand extends Command
         // 基本欄位驗證
         $validator = Validator::make($data, [
             'name' => 'required',
-            'cashBalance' => 'required|numeric',
+            'cashBalance' => 'required|numeric|min:0',
             'purchaseHistories' => 'required|array'
         ]);
 
@@ -188,7 +218,7 @@ class ImportDataCommand extends Command
             $historyValidator = Validator::make($history, [
                 'pharmacyName' => 'required',
                 'maskName' => 'required',
-                'transactionAmount' => 'required|numeric',
+                'transactionAmount' => 'required|numeric|min:0',
                 'transactionDate' => 'required|date'
             ]);
 
@@ -230,54 +260,132 @@ class ImportDataCommand extends Command
 
     protected function importPharmacy(array $data)
     {
-        $pharmacy = Pharmacy::updateOrCreate(
-            ['name' => $data['name']],
-            ['cash_balance' => $data['cashBalance']]
-        );
+        DB::beginTransaction();
+        try {
+            $pharmacy = Pharmacy::updateOrCreate(
+                ['name' => $data['name']],
+                ['cash_balance' => $data['cashBalance']]
+            );
 
-        $pharmacy->openingHours()->delete();
-        $pharmacy->masks()->delete();
+            // 收集營業時間資料
+            $openingHours = [];
+            $parts = explode('/', $data['openingHours']);
+            foreach ($parts as $part) {
+                $part = trim($part);
+                if (empty($part)) continue;
 
-        $this->processOpeningHours($pharmacy, $data['openingHours']);
+                if (preg_match('/^([^0-9]+)\s+(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})$/', $part, $matches)) {
+                    $days = trim($matches[1]);
+                    $openTime = $matches[2];
+                    $closeTime = $matches[3];
 
-        foreach ($data['masks'] as $maskData) {
-            Mask::create([
-                'pharmacy_id' => $pharmacy->id,
-                'name' => $maskData['name'],
-                'price' => $maskData['price']
-            ]);
+                    if (strpos($days, '-') !== false) {
+                        list($startDay, $endDay) = array_map('trim', explode('-', $days));
+                        $startDayIndex = $this->getDayIndex($startDay);
+                        $endDayIndex = $this->getDayIndex($endDay);
+                        
+                        if ($startDayIndex !== null && $endDayIndex !== null) {
+                            for ($i = $startDayIndex; $i <= $endDayIndex; $i++) {
+                                $openingHours[] = [
+                                    'pharmacy_id' => $pharmacy->id,
+                                    'day_of_week' => $i,
+                                    'open_time' => $openTime,
+                                    'close_time' => $closeTime
+                                ];
+                            }
+                        }
+                    } else {
+                        $days = array_map('trim', explode(',', $days));
+                        foreach ($days as $day) {
+                            $dayIndex = $this->getDayIndex($day);
+                            if ($dayIndex !== null) {
+                                $openingHours[] = [
+                                    'pharmacy_id' => $pharmacy->id,
+                                    'day_of_week' => $dayIndex,
+                                    'open_time' => $openTime,
+                                    'close_time' => $closeTime
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 收集口罩資料
+            $masks = [];
+            foreach ($data['masks'] as $maskData) {
+                $masks[] = [
+                    'pharmacy_id' => $pharmacy->id,
+                    'name' => $maskData['name'],
+                    'price' => $maskData['price'],
+                    'stock' => $this->defaultStock
+                ];
+            }
+
+            // 刪除現有資料
+            $pharmacy->openingHours()->delete();
+            $pharmacy->masks()->delete();
+
+            // 批量插入
+            if (!empty($openingHours)) {
+                OpeningHour::insert($openingHours);
+            }
+            if (!empty($masks)) {
+                Mask::insert($masks);
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
         }
     }
 
     protected function importUser(array $data)
     {
-        $user = PharmacyUser::updateOrCreate(
-            ['name' => $data['name']],
-            ['cash_balance' => $data['cashBalance']]
-        );
+        DB::beginTransaction();
+        try {
+            $user = PharmacyUser::updateOrCreate(
+                ['name' => $data['name']],
+                ['cash_balance' => $data['cashBalance']]
+            );
 
-        $user->transactions()->delete();
+            // 收集交易資料
+            $transactions = [];
+            foreach ($data['purchaseHistories'] as $history) {
+                $pharmacy = Pharmacy::where('name', $history['pharmacyName'])->first();
+                if (!$pharmacy) {
+                    continue;
+                }
 
-        foreach ($data['purchaseHistories'] as $history) {
-            $pharmacy = Pharmacy::where('name', $history['pharmacyName'])->first();
-            if (!$pharmacy) {
-                continue;
+                $mask = Mask::where('pharmacy_id', $pharmacy->id)
+                    ->where('name', $history['maskName'])
+                    ->first();
+                if (!$mask) {
+                    continue;
+                }
+
+                $transactions[] = [
+                    'user_id' => $user->id,
+                    'pharmacy_id' => $pharmacy->id,
+                    'mask_id' => $mask->id,
+                    'amount' => $history['transactionAmount'],
+                    'transaction_date' => Carbon::parse($history['transactionDate'])
+                ];
             }
 
-            $mask = Mask::where('pharmacy_id', $pharmacy->id)
-                ->where('name', $history['maskName'])
-                ->first();
-            if (!$mask) {
-                continue;
+            // 刪除現有交易
+            $user->transactions()->delete();
+
+            // 批量插入
+            if (!empty($transactions)) {
+                Transaction::insert($transactions);
             }
 
-            Transaction::create([
-                'user_id' => $user->id,
-                'pharmacy_id' => $pharmacy->id,
-                'mask_id' => $mask->id,
-                'amount' => $history['transactionAmount'],
-                'transaction_date' => Carbon::parse($history['transactionDate'])
-            ]);
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
         }
     }
 
@@ -355,11 +463,27 @@ class ImportDataCommand extends Command
         $this->info("總筆數: {$this->stats['total']}");
         $this->info("成功: {$this->stats['success']}");
         $this->info("失敗: {$this->stats['failed']}");
-
+        
+        // 錯誤分類統計
+        $errorTypes = [];
+        foreach ($this->stats['errors'] as $error) {
+            $type = get_class($error['error']);
+            $errorTypes[$type] = ($errorTypes[$type] ?? 0) + 1;
+        }
+        
+        if (!empty($errorTypes)) {
+            $this->info("\n錯誤類型統計：");
+            foreach ($errorTypes as $type => $count) {
+                $this->info("{$type}: {$count}");
+            }
+        }
+        
+        // 詳細錯誤資訊
         if (!empty($this->stats['errors'])) {
-            $this->error("\n錯誤：");
+            $this->error("\n錯誤詳情：");
             foreach ($this->stats['errors'] as $error) {
                 $this->error("第 {$error['index']} 筆: {$error['error']}");
+                $this->error("資料: " . json_encode($error['data'], JSON_UNESCAPED_UNICODE));
             }
         }
     }
