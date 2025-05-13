@@ -152,7 +152,16 @@ class PharmacyController extends Controller
             if ($request->has('day') || $request->has('time')) {
                 $query->whereHas('openingHours', function ($q) use ($request) {
                     if ($request->has('day')) {
-                        $q->where('day', $request->day);
+                        $dayMap = [
+                            'Monday' => 0,
+                            'Tuesday' => 1,
+                            'Wednesday' => 2,
+                            'Thursday' => 3,
+                            'Friday' => 4,
+                            'Saturday' => 5,
+                            'Sunday' => 6
+                        ];
+                        $q->where('day_of_week', $dayMap[$request->day]);
                     }
                     if ($request->has('time')) {
                         $q->where('open_time', '<=', $request->time)
