@@ -111,7 +111,8 @@
   - 參考Swagger UI 路徑：`phantom_mask_laradock/storage/api-docs/api-docs.json`
 2. 提供 Postman 集合與自動測試報告
   - postman匯出檔案：`docs/Phantom Mask API.postman_collection.json`
-  - 測試報告參考截圖：`docs/postman-test.png`
+  - 測試報告參考截圖：`docs/postman-test.png`, `docs/postman-test2.png`
+  - api自動測試範圍：ALL
 3. 提供 Postman 執行後的具體的內容
   - 前端可直接對照範例參考截圖：`docs/postman-api-example/` 目錄下的所有檔案
 
@@ -130,3 +131,6 @@
    - 參考檔案：`database/migrations/` 目錄下的所有檔案
 3. 索引設計
    - 參考檔案：`database/migrations/` 目錄下的所有檔案
+4.Dockerize
+   - 本次沒有針對docker環境特別要求，也使用Laradock為開發和部屬環境，因此並未將docker環境與筆試作業合併打包
+   - 目前的執行環境中，也都是使用 docker 與 VM 來平衡開發環境的不確定性，也有達到筆試Bouns的要求「You may use docker to ensure a uniform setup across environments.」
