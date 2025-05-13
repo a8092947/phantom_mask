@@ -4,8 +4,8 @@
 ### A.1. 技術選擇
 - 使用 Laravel 框架 (版本 10.x)
 - 使用 MySQL 資料庫
-- 使用 Laradock 作為開發環境
-- 部屬網址：https://phantom_mask_laradock.kdan.succ.work/api/documentation#/
+- 使用 Laradock 作為開發與部屬環境
+- 部屬網址 （swagger）：https://phantom_mask_laradock.kdan.succ.work/api/documentation#/
 
 ### A.2. 需求完成度
 1. 列出特定時間營業的藥局 (List all pharmacies open at a specific time and on a day of the week if requested)
@@ -107,9 +107,14 @@
 
 ### A.4. API 文件
 1. 使用 OpenAPI 規格
-2. 提供 Postman 集合
-3. 提供 API 測試工具
-4. Swagger UI 路徑：`/api/documentation`
+  - 參考Swagger UI 路徑：`phantom_mask_laradock/storage/api-docs/api-docs.json`
+2. 提供 API 測試工具
+  2.1. 提供 Postman 集合與自動測試報告
+    - postman匯出檔案：`docs/Phantom Mask API.postman_collection.json`
+    - 測試報告參考截圖：`docs/postman-test.png`
+  2.1. 提供 Postman 執行後的具體的內容
+    - 前端可直接對照範例參考截圖：`docs/postman-api-example/` 目錄下的所有檔案
+
 
 ### A.5. 資料匯入
 1. 使用 Artisan 命令
@@ -120,6 +125,8 @@
 ## B. 其他資訊
 ### B.1. 資料庫設計
 1. ERD 圖
+   - 參考檔案：`docs/ERD.png`
 2. 資料表關聯
+   - 參考檔案：`database/migrations/` 目錄下的所有檔案
 3. 索引設計
    - 參考檔案：`database/migrations/` 目錄下的所有檔案
