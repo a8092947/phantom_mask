@@ -7,10 +7,6 @@ use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
-use App\Models\User;
-use Illuminate\Support\Facades\DB;
-use App\Models\Mask;
-use App\Models\Pharmacy;
 use App\Services\TransactionService;
 use App\Repositories\TransactionRepository;
 
@@ -371,7 +367,7 @@ class TransactionController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'user_id' => 'required|exists:users,id',
+            'user_id' => 'required|exists:pharmacy_users,id',
             'pharmacy_id' => 'required|exists:pharmacies,id',
             'mask_id' => 'required|exists:masks,id',
             'quantity' => 'required|integer|min:1'

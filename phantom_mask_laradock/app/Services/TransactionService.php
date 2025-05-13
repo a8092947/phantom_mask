@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\Transaction;
-use App\Models\User;
+use App\Models\PharmacyUser;
 use App\Models\Pharmacy;
 use App\Models\Mask;
 use App\Repositories\TransactionRepository;
@@ -93,7 +93,7 @@ class TransactionService
             }
 
             // 2. 檢查使用者餘額
-            $user = User::lockForUpdate()->findOrFail($data['user_id']);
+            $user = PharmacyUser::lockForUpdate()->findOrFail($data['user_id']);
             $pharmacy = Pharmacy::lockForUpdate()->findOrFail($data['pharmacy_id']);
             
             $totalAmount = $mask->price * $data['quantity'];
