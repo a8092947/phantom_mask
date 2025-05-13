@@ -137,16 +137,36 @@ class TransactionService
     /**
      * 取得交易統計
      *
-     * @param string|null $startDate
-     * @param string|null $endDate
+     * @param array $params 查詢參數
      * @return array
      */
-    public function getTransactionStats(?string $startDate = null, ?string $endDate = null)
+    public function getTransactionStats(array $params = [])
     {
-        // 使用快取，快取時間為 1 小時
-        return Cache::remember('transaction_stats', 3600, function () use ($startDate, $endDate) {
-            return $this->transactionRepository->getTransactionStats($startDate, $endDate);
-        });
+        try {
+            $stats = $this->transactionRepository->getTransactionStats($params);
+
+            // 取得熱門口罩排行
+            $topMasks = $this->transactionRepository->getTopMasks($params);
+
+            // 取得熱門藥局排行
+            $topPharmacies = $this->transactionRepository->getTopPharmacies($params);
+
+            // 取得交易時段分布
+            $timeDistribution = $this->transactionRepository->getTimeDistribution($params);
+
+            return [
+                'summary' => $stats,
+                'top_masks' => $topMasks,
+                'top_pharmacies' => $topPharmacies,
+                'time_distribution' => $timeDistribution
+            ];
+        } catch (\Exception $e) {
+            Log::error('查詢交易統計失敗', [
+                'params' => $params,
+                'error' => $e->getMessage()
+            ]);
+            throw new \Exception('查詢交易統計失敗');
+        }
     }
 
     /**

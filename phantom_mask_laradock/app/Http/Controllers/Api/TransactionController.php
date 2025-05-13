@@ -179,9 +179,11 @@ class TransactionController extends Controller
     }
 
     /**
+     * 取得交易統計
+     *
      * @OA\Get(
      *     path="/api/transactions/statistics",
-     *     summary="取得交易統計資訊",
+     *     summary="取得交易統計",
      *     tags={"交易"},
      *     @OA\Parameter(
      *         name="start_date",
@@ -197,64 +199,110 @@ class TransactionController extends Controller
      *         required=false,
      *         @OA\Schema(type="string", format="date")
      *     ),
-     *     @OA\Response(
-     *         response=200,
-     *         description="成功取得交易統計資訊",
-     *         @OA\JsonContent(
-     *             @OA\Property(property="status", type="string", example="success"),
-     *             @OA\Property(property="message", type="string", example="success"),
-     *             @OA\Property(
-     *                 property="data",
-     *                 type="object",
-     *                 @OA\Property(property="total_transactions", type="integer", example=100, description="總交易筆數"),
-     *                 @OA\Property(property="total_amount", type="number", format="float", example=5000.00, description="總交易金額"),
-     *                 @OA\Property(property="average_amount", type="number", format="float", example=50.00, description="平均交易金額")
-     *             )
-     *         )
+     *     @OA\Parameter(
+     *         name="pharmacy_id",
+     *         in="query",
+     *         description="藥局ID",
+     *         required=false,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Parameter(
+     *         name="mask_id",
+     *         in="query",
+     *         description="口罩ID",
+     *         required=false,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Parameter(
+     *         name="user_id",
+     *         in="query",
+     *         description="用戶ID",
+     *         required=false,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Parameter(
+     *         name="group_by",
+     *         in="query",
+     *         description="分組方式 (day/week/month/year)",
+     *         required=false,
+     *         @OA\Schema(type="string", enum={"day", "week", "month", "year"})
      *     ),
      *     @OA\Response(
-     *         response=422,
-     *         description="驗證錯誤",
+     *         response=200,
+     *         description="成功",
      *         @OA\JsonContent(
-     *             @OA\Property(property="status", type="string", example="error"),
-     *             @OA\Property(property="message", type="string", example="驗證失敗"),
-     *             @OA\Property(property="errors", type="object")
+     *             type="object",
+     *             properties={
+     *                 @OA\Property(property="summary", type="object", properties={
+     *                     @OA\Property(property="total_transactions", type="integer", description="總交易筆數"),
+     *                     @OA\Property(property="total_masks", type="integer", description="總口罩數量"),
+     *                     @OA\Property(property="total_amount", type="number", format="float", description="總交易金額"),
+     *                     @OA\Property(property="average_amount", type="number", format="float", description="平均交易金額"),
+     *                     @OA\Property(property="max_amount", type="number", format="float", description="最高交易金額"),
+     *                     @OA\Property(property="min_amount", type="number", format="float", description="最低交易金額"),
+     *                     @OA\Property(property="average_quantity", type="number", format="float", description="平均購買數量")
+     *                 }),
+     *                 @OA\Property(property="top_masks", type="array", description="熱門口罩排行", @OA\Items(
+     *                     type="object",
+     *                     properties={
+     *                         @OA\Property(property="mask_id", type="integer", description="口罩ID"),
+     *                         @OA\Property(property="mask_name", type="string", description="口罩名稱"),
+     *                         @OA\Property(property="total_quantity", type="integer", description="總銷售數量"),
+     *                         @OA\Property(property="total_amount", type="number", format="float", description="總銷售金額")
+     *                     }
+     *                 )),
+     *                 @OA\Property(property="top_pharmacies", type="array", description="熱門藥局排行", @OA\Items(
+     *                     type="object",
+     *                     properties={
+     *                         @OA\Property(property="pharmacy_id", type="integer", description="藥局ID"),
+     *                         @OA\Property(property="pharmacy_name", type="string", description="藥局名稱"),
+     *                         @OA\Property(property="total_transactions", type="integer", description="總交易筆數"),
+     *                         @OA\Property(property="total_amount", type="number", format="float", description="總交易金額")
+     *                     }
+     *                 )),
+     *                 @OA\Property(property="time_distribution", type="object", description="交易時段分布", properties={
+     *                     @OA\Property(property="morning", type="integer", description="上午 (06:00-12:00)"),
+     *                     @OA\Property(property="afternoon", type="integer", description="下午 (12:00-18:00)"),
+     *                     @OA\Property(property="evening", type="integer", description="晚上 (18:00-24:00)"),
+     *                     @OA\Property(property="night", type="integer", description="凌晨 (00:00-06:00)")
+     *                 })
+     *             }
      *         )
      *     ),
      *     @OA\Response(
      *         response=500,
      *         description="伺服器錯誤",
      *         @OA\JsonContent(
-     *             @OA\Property(property="status", type="string", example="error"),
-     *             @OA\Property(property="message", type="string", example="取得交易統計資訊失敗"),
-     *             @OA\Property(property="errors", type="object")
+     *             type="object",
+     *             properties={
+     *                 @OA\Property(property="status", type="string", example="error"),
+     *                 @OA\Property(property="message", type="string", example="查詢交易統計失敗"),
+     *                 @OA\Property(
+     *                     property="errors",
+     *                     type="object",
+     *                     properties={
+     *                         @OA\Property(property="error", type="string", example="資料庫查詢錯誤")
+     *                     }
+     *                 )
+     *             }
      *         )
      *     )
      * )
      */
     public function statistics(Request $request)
     {
-        try {
-            $validator = Validator::make($request->all(), [
-                'start_date' => 'nullable|date',
-                'end_date' => 'nullable|date|after_or_equal:start_date'
-            ]);
+        $params = [
+            'start_date' => $request->input('start_date'),
+            'end_date' => $request->input('end_date'),
+            'pharmacy_id' => $request->input('pharmacy_id'),
+            'mask_id' => $request->input('mask_id'),
+            'user_id' => $request->input('user_id'),
+            'group_by' => $request->input('group_by')
+        ];
 
-            if ($validator->fails()) {
-                Log::warning('Transaction statistics validation failed', ['errors' => $validator->errors()]);
-                return $this->error('驗證失敗', $validator->errors(), 422);
-            }
-
-            $result = $this->transactionService->getTransactionStatsWithCache(
-                $request->start_date,
-                $request->end_date
-            );
-
-            return $this->success($result);
-        } catch (\Exception $e) {
-            Log::error('Transaction statistics failed', ['error' => $e->getMessage()]);
-            return $this->error('查詢交易統計失敗', ['error' => $e->getMessage()], 500);
-        }
+        return response()->json(
+            $this->transactionService->getTransactionStats($params)
+        );
     }
 
     /**

@@ -665,8 +665,9 @@
                 "tags": [
                     "交易"
                 ],
-                "summary": "取得交易統計資訊",
-                "operationId": "b4a000ea9841dbecf9a94cdc80a2b23f",
+                "summary": "取得交易統計",
+                "description": "取得交易統計",
+                "operationId": "feddcfa4f4bf413d75e09c3a71cc7330",
                 "parameters": [
                     {
                         "name": "start_date",
@@ -687,66 +688,167 @@
                             "type": "string",
                             "format": "date"
                         }
+                    },
+                    {
+                        "name": "pharmacy_id",
+                        "in": "query",
+                        "description": "藥局ID",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "mask_id",
+                        "in": "query",
+                        "description": "口罩ID",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "user_id",
+                        "in": "query",
+                        "description": "用戶ID",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "group_by",
+                        "in": "query",
+                        "description": "分組方式 (day/week/month/year)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "day",
+                                "week",
+                                "month",
+                                "year"
+                            ]
+                        }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "成功取得交易統計資訊",
+                        "description": "成功",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "properties": {
-                                        "status": {
-                                            "type": "string",
-                                            "example": "success"
-                                        },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "success"
-                                        },
-                                        "data": {
+                                        "summary": {
                                             "properties": {
                                                 "total_transactions": {
                                                     "description": "總交易筆數",
-                                                    "type": "integer",
-                                                    "example": 100
+                                                    "type": "integer"
+                                                },
+                                                "total_masks": {
+                                                    "description": "總口罩數量",
+                                                    "type": "integer"
                                                 },
                                                 "total_amount": {
                                                     "description": "總交易金額",
                                                     "type": "number",
-                                                    "format": "float",
-                                                    "example": 5000
+                                                    "format": "float"
                                                 },
                                                 "average_amount": {
                                                     "description": "平均交易金額",
                                                     "type": "number",
-                                                    "format": "float",
-                                                    "example": 50
+                                                    "format": "float"
+                                                },
+                                                "max_amount": {
+                                                    "description": "最高交易金額",
+                                                    "type": "number",
+                                                    "format": "float"
+                                                },
+                                                "min_amount": {
+                                                    "description": "最低交易金額",
+                                                    "type": "number",
+                                                    "format": "float"
+                                                },
+                                                "average_quantity": {
+                                                    "description": "平均購買數量",
+                                                    "type": "number",
+                                                    "format": "float"
                                                 }
                                             },
                                             "type": "object"
-                                        }
-                                    },
-                                    "type": "object"
-                                }
-                            }
-                        }
-                    },
-                    "422": {
-                        "description": "驗證錯誤",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "properties": {
-                                        "status": {
-                                            "type": "string",
-                                            "example": "error"
                                         },
-                                        "message": {
-                                            "type": "string",
-                                            "example": "驗證失敗"
+                                        "top_masks": {
+                                            "description": "熱門口罩排行",
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "mask_id": {
+                                                        "description": "口罩ID",
+                                                        "type": "integer"
+                                                    },
+                                                    "mask_name": {
+                                                        "description": "口罩名稱",
+                                                        "type": "string"
+                                                    },
+                                                    "total_quantity": {
+                                                        "description": "總銷售數量",
+                                                        "type": "integer"
+                                                    },
+                                                    "total_amount": {
+                                                        "description": "總銷售金額",
+                                                        "type": "number",
+                                                        "format": "float"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
                                         },
-                                        "errors": {
+                                        "top_pharmacies": {
+                                            "description": "熱門藥局排行",
+                                            "type": "array",
+                                            "items": {
+                                                "properties": {
+                                                    "pharmacy_id": {
+                                                        "description": "藥局ID",
+                                                        "type": "integer"
+                                                    },
+                                                    "pharmacy_name": {
+                                                        "description": "藥局名稱",
+                                                        "type": "string"
+                                                    },
+                                                    "total_transactions": {
+                                                        "description": "總交易筆數",
+                                                        "type": "integer"
+                                                    },
+                                                    "total_amount": {
+                                                        "description": "總交易金額",
+                                                        "type": "number",
+                                                        "format": "float"
+                                                    }
+                                                },
+                                                "type": "object"
+                                            }
+                                        },
+                                        "time_distribution": {
+                                            "description": "交易時段分布",
+                                            "properties": {
+                                                "morning": {
+                                                    "description": "上午 (06:00-12:00)",
+                                                    "type": "integer"
+                                                },
+                                                "afternoon": {
+                                                    "description": "下午 (12:00-18:00)",
+                                                    "type": "integer"
+                                                },
+                                                "evening": {
+                                                    "description": "晚上 (18:00-24:00)",
+                                                    "type": "integer"
+                                                },
+                                                "night": {
+                                                    "description": "凌晨 (00:00-06:00)",
+                                                    "type": "integer"
+                                                }
+                                            },
                                             "type": "object"
                                         }
                                     },
@@ -767,9 +869,15 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "取得交易統計資訊失敗"
+                                            "example": "查詢交易統計失敗"
                                         },
                                         "errors": {
+                                            "properties": {
+                                                "error": {
+                                                    "type": "string",
+                                                    "example": "資料庫查詢錯誤"
+                                                }
+                                            },
                                             "type": "object"
                                         }
                                     },

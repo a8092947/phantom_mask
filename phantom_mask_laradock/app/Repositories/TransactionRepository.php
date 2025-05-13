@@ -47,35 +47,150 @@ class TransactionRepository extends BaseRepository
     /**
      * 取得交易統計
      *
-     * @param string|null $startDate
-     * @param string|null $endDate
+     * @param array $params 查詢參數
      * @return array
      */
-    public function getTransactionStats(?string $startDate = null, ?string $endDate = null)
+    public function getTransactionStats(array $params = [])
     {
-        $query = $this->model->query();
+        $query = Transaction::query();
 
-        // 日期範圍篩選
-        if ($startDate) {
-            $query->where('transaction_date', '>=', $startDate);
-        }
-        if ($endDate) {
-            $query->where('transaction_date', '<=', $endDate . ' 23:59:59');
-        }
+        // 應用查詢條件
+        $this->applyQueryFilters($query, $params);
 
-        $stats = $query->select(
+        return $query->select([
             DB::raw('COUNT(*) as total_transactions'),
             DB::raw('SUM(quantity) as total_masks'),
             DB::raw('SUM(amount) as total_amount'),
-            DB::raw('AVG(amount) as average_amount')
-        )->first();
+            DB::raw('AVG(amount) as average_amount'),
+            DB::raw('MAX(amount) as max_amount'),
+            DB::raw('MIN(amount) as min_amount'),
+            DB::raw('AVG(quantity) as average_quantity')
+        ])->first()->toArray();
+    }
 
-        return [
-            'total_transactions' => $stats->total_transactions ?? 0,
-            'total_masks' => $stats->total_masks ?? 0,
-            'total_amount' => $stats->total_amount ?? 0,
-            'average_amount' => $stats->average_amount ?? 0
-        ];
+    /**
+     * 取得熱門口罩排行
+     *
+     * @param array $params 查詢參數
+     * @return array
+     */
+    public function getTopMasks(array $params = [])
+    {
+        $query = Transaction::query()
+            ->join('masks', 'transactions.mask_id', '=', 'masks.id')
+            ->select([
+                'masks.id as mask_id',
+                'masks.name as mask_name',
+                DB::raw('SUM(transactions.quantity) as total_quantity'),
+                DB::raw('SUM(transactions.amount) as total_amount')
+            ])
+            ->groupBy('masks.id', 'masks.name')
+            ->orderBy('total_quantity', 'desc')
+            ->limit(10);
+
+        // 應用查詢條件
+        $this->applyQueryFilters($query, $params);
+
+        return $query->get()->toArray();
+    }
+
+    /**
+     * 取得熱門藥局排行
+     *
+     * @param array $params 查詢參數
+     * @return array
+     */
+    public function getTopPharmacies(array $params = [])
+    {
+        $query = Transaction::query()
+            ->join('pharmacies', 'transactions.pharmacy_id', '=', 'pharmacies.id')
+            ->select([
+                'pharmacies.id as pharmacy_id',
+                'pharmacies.name as pharmacy_name',
+                DB::raw('COUNT(*) as total_transactions'),
+                DB::raw('SUM(transactions.amount) as total_amount')
+            ])
+            ->groupBy('pharmacies.id', 'pharmacies.name')
+            ->orderBy('total_transactions', 'desc')
+            ->limit(10);
+
+        // 應用查詢條件
+        $this->applyQueryFilters($query, $params);
+
+        return $query->get()->toArray();
+    }
+
+    /**
+     * 取得交易時段分布
+     *
+     * @param array $params 查詢參數
+     * @return array
+     */
+    public function getTimeDistribution(array $params = [])
+    {
+        $query = Transaction::query()
+            ->select([
+                DB::raw('COUNT(CASE WHEN HOUR(transaction_date) BETWEEN 6 AND 11 THEN 1 END) as morning'),
+                DB::raw('COUNT(CASE WHEN HOUR(transaction_date) BETWEEN 12 AND 17 THEN 1 END) as afternoon'),
+                DB::raw('COUNT(CASE WHEN HOUR(transaction_date) BETWEEN 18 AND 23 THEN 1 END) as evening'),
+                DB::raw('COUNT(CASE WHEN HOUR(transaction_date) BETWEEN 0 AND 5 THEN 1 END) as night')
+            ]);
+
+        // 應用查詢條件
+        $this->applyQueryFilters($query, $params);
+
+        return $query->first()->toArray();
+    }
+
+    /**
+     * 應用查詢條件
+     *
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @param array $params
+     * @return void
+     */
+    private function applyQueryFilters($query, array $params)
+    {
+        // 日期範圍
+        if (!empty($params['start_date'])) {
+            $query->where('transaction_date', '>=', $params['start_date']);
+        }
+        if (!empty($params['end_date'])) {
+            $query->where('transaction_date', '<=', $params['end_date']);
+        }
+
+        // 藥局
+        if (!empty($params['pharmacy_id'])) {
+            $query->where('pharmacy_id', $params['pharmacy_id']);
+        }
+
+        // 口罩
+        if (!empty($params['mask_id'])) {
+            $query->where('mask_id', $params['mask_id']);
+        }
+
+        // 用戶
+        if (!empty($params['user_id'])) {
+            $query->where('user_id', $params['user_id']);
+        }
+
+        // 分組
+        if (!empty($params['group_by'])) {
+            switch ($params['group_by']) {
+                case 'day':
+                    $query->groupBy(DB::raw('DATE(transaction_date)'));
+                    break;
+                case 'week':
+                    $query->groupBy(DB::raw('YEARWEEK(transaction_date)'));
+                    break;
+                case 'month':
+                    $query->groupBy(DB::raw('DATE_FORMAT(transaction_date, "%Y-%m")'));
+                    break;
+                case 'year':
+                    $query->groupBy(DB::raw('YEAR(transaction_date)'));
+                    break;
+            }
+        }
     }
 
     public function getTopUsers($limit = 10, $startDate = null, $endDate = null, $sortBy = 'amount', $orderBy = 'desc')
