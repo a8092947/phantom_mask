@@ -293,19 +293,29 @@ class TransactionController extends Controller
 
         try {
             $transaction = DB::transaction(function () use ($request) {
-                $mask = Mask::findOrFail($request->mask_id);
+                // 使用 lockForUpdate 鎖定要更新的記錄
+                $mask = Mask::lockForUpdate()->findOrFail($request->mask_id);
                 if ($mask->stock < $request->quantity) {
                     throw new \Exception('庫存不足');
                 }
 
-                $user = User::findOrFail($request->user_id);
+                $user = User::lockForUpdate()->findOrFail($request->user_id);
+                $pharmacy = Pharmacy::lockForUpdate()->findOrFail($request->pharmacy_id);
+                
                 $totalAmount = $mask->price * $request->quantity;
                 if ($user->cash_balance < $totalAmount) {
                     throw new \Exception('餘額不足');
                 }
 
+                // 更新口罩庫存和價格
                 $mask->decrement('stock', $request->quantity);
+                $mask->increment('price', 1); // 每次購買後價格增加 1 元
+
+                // 更新用戶餘額
                 $user->decrement('cash_balance', $totalAmount);
+
+                // 更新藥局餘額
+                $pharmacy->increment('cash_balance', $totalAmount);
 
                 return Transaction::create([
                     'user_id' => $request->user_id,
