@@ -22,16 +22,6 @@ namespace App\OpenApi;
  *     description="Development API Server"
  * )
  * 
- * @OA\Server(
- *     url="http://localhost:8000",
- *     description="Local Development Server"
- * )
- * 
- * @OA\Server(
- *     url="http://phantom_mask_laradock.kdan.succ.work",
- *     description="Production API Server"
- * )
- * 
  * @OA\Tag(
  *     name="藥局",
  *     description="藥局相關 API"

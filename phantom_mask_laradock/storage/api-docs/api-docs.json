@@ -17,14 +17,6 @@
         {
             "url": "http://phantom_mask_laradock.kdan.succ.work",
             "description": "Development API Server"
-        },
-        {
-            "url": "http://localhost:8000",
-            "description": "Local Development Server"
-        },
-        {
-            "url": "http://phantom_mask_laradock.kdan.succ.work",
-            "description": "Production API Server"
         }
     ],
     "paths": {
