@@ -226,13 +226,22 @@ class PharmacyController extends Controller
             $pharmacies = $query->get();
 
             $result = $pharmacies->map(function ($pharmacy) {
+                $dayNameMap = [
+                    0 => 'Monday',
+                    1 => 'Tuesday',
+                    2 => 'Wednesday',
+                    3 => 'Thursday',
+                    4 => 'Friday',
+                    5 => 'Saturday',
+                    6 => 'Sunday'
+                ];
                 return [
                     'id' => $pharmacy->id,
                     'name' => $pharmacy->name,
                     'cash_balance' => $pharmacy->cash_balance,
-                    'opening_hours' => collect($pharmacy->openingHours)->map(function ($oh) {
+                    'opening_hours' => collect($pharmacy->openingHours)->map(function ($oh) use ($dayNameMap) {
                         return [
-                            'day' => $oh->day ?? $oh->day_of_week,
+                            'day' => $dayNameMap[$oh->day_of_week],
                             'open' => isset($oh->open_time) ? (is_string($oh->open_time) ? $oh->open_time : $oh->open_time->format('H:i')) : null,
                             'close' => isset($oh->close_time) ? (is_string($oh->close_time) ? $oh->close_time : $oh->close_time->format('H:i')) : null,
                         ];
@@ -241,8 +250,8 @@ class PharmacyController extends Controller
                         return [
                             'id' => $mask->id,
                             'name' => $mask->name,
-                            'price' => $mask->price,
-                            'stock' => $mask->stock,
+                            'price' => (float)$mask->price,
+                            'stock' => (float)$mask->stock,
                         ];
                     })->toArray(),
                 ];
@@ -374,13 +383,22 @@ class PharmacyController extends Controller
                 }
             }])->findOrFail($id);
 
+            $dayNameMap = [
+                0 => 'Monday',
+                1 => 'Tuesday',
+                2 => 'Wednesday',
+                3 => 'Thursday',
+                4 => 'Friday',
+                5 => 'Saturday',
+                6 => 'Sunday'
+            ];
             $result = [
                 'id' => $pharmacy->id,
                 'name' => $pharmacy->name,
                 'cash_balance' => $pharmacy->cash_balance,
-                'opening_hours' => collect($pharmacy->openingHours)->map(function ($oh) {
+                'opening_hours' => collect($pharmacy->openingHours)->map(function ($oh) use ($dayNameMap) {
                     return [
-                        'day' => $oh->day ?? $oh->day_of_week,
+                        'day' => $dayNameMap[$oh->day_of_week],
                         'open' => isset($oh->open_time) ? (is_string($oh->open_time) ? $oh->open_time : $oh->open_time->format('H:i')) : null,
                         'close' => isset($oh->close_time) ? (is_string($oh->close_time) ? $oh->close_time : $oh->close_time->format('H:i')) : null,
                     ];
@@ -389,8 +407,8 @@ class PharmacyController extends Controller
                     return [
                         'id' => $mask->id,
                         'name' => $mask->name,
-                        'price' => $mask->price,
-                        'stock' => $mask->stock,
+                        'price' => (float)$mask->price,
+                        'stock' => (float)$mask->stock,
                     ];
                 })->toArray(),
             ];
