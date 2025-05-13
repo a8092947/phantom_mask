@@ -667,7 +667,7 @@
                 ],
                 "summary": "取得交易統計",
                 "description": "取得交易統計",
-                "operationId": "feddcfa4f4bf413d75e09c3a71cc7330",
+                "operationId": "b4a000ea9841dbecf9a94cdc80a2b23f",
                 "parameters": [
                     {
                         "name": "start_date",

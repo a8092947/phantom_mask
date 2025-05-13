@@ -345,10 +345,11 @@ class ImportDataCommand extends Command
     {
         DB::beginTransaction();
         try {
-            $user = PharmacyUser::updateOrCreate(
-                ['name' => $data['name']],
-                ['cash_balance' => $data['cashBalance']]
-            );
+            // 使用 JSON 中的 cashBalance 值
+            $user = PharmacyUser::create([
+                'name' => $data['name'],
+                'cash_balance' => $data['cashBalance']
+            ]);
 
             // 收集交易資料
             $transactions = [];

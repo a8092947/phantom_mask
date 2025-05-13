@@ -34,11 +34,6 @@ class PharmacyUser extends Model
     // 事件處理
     protected static function booted()
     {
-        static::creating(function ($user) {
-            // 建立用戶時的處理邏輯
-            $user->cash_balance = 0;
-        });
-
         static::deleting(function ($user) {
             // 刪除用戶時的處理邏輯
             $user->transactions()->delete();
