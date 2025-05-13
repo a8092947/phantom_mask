@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use App\Models\Mask;
 use App\Models\Pharmacy;
 use App\Services\TransactionService;
+use App\Repositories\TransactionRepository;
 
 /**
  * @OA\Tag(
@@ -22,17 +23,27 @@ use App\Services\TransactionService;
 class TransactionController extends Controller
 {
     protected $transactionService;
+    protected $transactionRepository;
 
-    public function __construct(TransactionService $transactionService)
+    public function __construct(TransactionService $transactionService, TransactionRepository $transactionRepository)
     {
         $this->transactionService = $transactionService;
+        $this->transactionRepository = $transactionRepository;
     }
 
     /**
      * @OA\Get(
      *     path="/api/transactions/top-users",
-     *     summary="取得最高交易金額用戶列表",
+     *     summary="取得交易排名前 N 名的使用者",
+     *     description="根據不同的統計方式（總金額、交易次數、平均金額、口罩數量、最後交易時間）取得排名前 N 名的使用者",
      *     tags={"交易"},
+     *     @OA\Parameter(
+     *         name="limit",
+     *         in="query",
+     *         description="要返回的使用者數量",
+     *         required=false,
+     *         @OA\Schema(type="integer", default=10, minimum=1, maximum=100)
+     *     ),
      *     @OA\Parameter(
      *         name="start_date",
      *         in="query",
@@ -48,37 +59,64 @@ class TransactionController extends Controller
      *         @OA\Schema(type="string", format="date")
      *     ),
      *     @OA\Parameter(
-     *         name="limit",
+     *         name="sort_by",
      *         in="query",
-     *         description="回傳數量限制 (預設: 10)",
+     *         description="排序依據",
      *         required=false,
-     *         @OA\Schema(type="integer", minimum=1, default=10)
+     *         @OA\Schema(
+     *             type="string",
+     *             enum={"amount", "transaction_count", "avg_amount", "mask_count", "last_transaction"},
+     *             default="amount"
+     *         )
+     *     ),
+     *     @OA\Parameter(
+     *         name="order_by",
+     *         in="query",
+     *         description="排序方式",
+     *         required=false,
+     *         @OA\Schema(
+     *             type="string",
+     *             enum={"asc", "desc"},
+     *             default="desc"
+     *         )
      *     ),
      *     @OA\Response(
      *         response=200,
-     *         description="成功取得最高交易金額用戶列表",
+     *         description="成功取得使用者排名",
      *         @OA\JsonContent(
      *             @OA\Property(property="status", type="string", example="success"),
-     *             @OA\Property(property="message", type="string", example="success"),
      *             @OA\Property(
      *                 property="data",
      *                 type="array",
      *                 @OA\Items(
+     *                     type="object",
      *                     @OA\Property(property="id", type="integer", example=1),
      *                     @OA\Property(property="name", type="string", example="John Doe"),
-     *                     @OA\Property(property="cash_balance", type="number", format="float", example=1000.00),
-     *                     @OA\Property(property="total_amount", type="number", format="float", example=500.00, description="總交易金額")
+     *                     @OA\Property(property="cash_balance", type="number", format="float", example=1000.50),
+     *                     @OA\Property(property="total_amount", type="number", format="float", example=500.75),
+     *                     @OA\Property(property="transaction_count", type="integer", example=5),
+     *                     @OA\Property(property="avg_amount", type="number", format="float", example=100.15),
+     *                     @OA\Property(property="mask_count", type="integer", example=20),
+     *                     @OA\Property(property="last_transaction", type="string", format="date-time", example="2024-03-15 10:30:00")
      *                 )
      *             )
      *         )
      *     ),
      *     @OA\Response(
      *         response=422,
-     *         description="驗證錯誤",
+     *         description="驗證失敗",
      *         @OA\JsonContent(
      *             @OA\Property(property="status", type="string", example="error"),
      *             @OA\Property(property="message", type="string", example="驗證失敗"),
-     *             @OA\Property(property="errors", type="object")
+     *             @OA\Property(
+     *                 property="errors",
+     *                 type="object",
+     *                 @OA\Property(property="limit", type="array", @OA\Items(type="string")),
+     *                 @OA\Property(property="start_date", type="array", @OA\Items(type="string")),
+     *                 @OA\Property(property="end_date", type="array", @OA\Items(type="string")),
+     *                 @OA\Property(property="sort_by", type="array", @OA\Items(type="string")),
+     *                 @OA\Property(property="order_by", type="array", @OA\Items(type="string"))
+     *             )
      *         )
      *     ),
      *     @OA\Response(
@@ -86,8 +124,12 @@ class TransactionController extends Controller
      *         description="伺服器錯誤",
      *         @OA\JsonContent(
      *             @OA\Property(property="status", type="string", example="error"),
-     *             @OA\Property(property="message", type="string", example="取得最高交易金額用戶失敗"),
-     *             @OA\Property(property="errors", type="object")
+     *             @OA\Property(property="message", type="string", example="查詢最高交易金額的使用者失敗"),
+     *             @OA\Property(
+     *                 property="errors",
+     *                 type="object",
+     *                 @OA\Property(property="error", type="string", example="錯誤訊息")
+     *             )
      *         )
      *     )
      * )
@@ -98,7 +140,9 @@ class TransactionController extends Controller
             $validator = Validator::make($request->all(), [
                 'limit' => 'nullable|integer|min:1|max:100',
                 'start_date' => 'nullable|date',
-                'end_date' => 'nullable|date|after_or_equal:start_date'
+                'end_date' => 'nullable|date|after_or_equal:start_date',
+                'sort_by' => 'nullable|string|in:amount,transaction_count,avg_amount,mask_count,last_transaction',
+                'order_by' => 'nullable|string|in:asc,desc'
             ]);
 
             if ($validator->fails()) {
@@ -106,18 +150,24 @@ class TransactionController extends Controller
                 return $this->error('驗證失敗', $validator->errors(), 422);
             }
 
-            $users = $this->transactionService->getTopSpendersWithCache(
-                $request->limit ?? 10,
-                $request->start_date,
-                $request->end_date
+            $users = $this->transactionRepository->getTopUsers(
+                $request->input('limit', 10),
+                $request->input('start_date'),
+                $request->input('end_date'),
+                $request->input('sort_by', 'amount'),
+                $request->input('order_by', 'desc')
             );
 
-            $result = $users->map(function ($user) {
+            $result = $users->map(function ($transaction) {
                 return [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'cash_balance' => $user->cash_balance,
-                    'total_amount' => $user->transactions_sum_amount ?? 0
+                    'id' => $transaction->user->id,
+                    'name' => $transaction->user->name,
+                    'cash_balance' => $transaction->user->cash_balance,
+                    'total_amount' => $transaction->sum_amount ?? 0,
+                    'transaction_count' => $transaction->count_id ?? 0,
+                    'avg_amount' => $transaction->avg_amount ?? 0,
+                    'mask_count' => $transaction->sum_quantity ?? 0,
+                    'last_transaction' => $transaction->max_transaction_date ?? null
                 ];
             });
 

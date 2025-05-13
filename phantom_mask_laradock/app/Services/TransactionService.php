@@ -55,7 +55,8 @@ class TransactionService
             ]);
 
             // 3. 更新使用者餘額
-            $this->userRepository->updateBalance($user->id, $user->cash_balance - $data['amount']);
+            $user->cash_balance -= $data['amount'];
+            $user->save();
 
             // 4. 更新藥局餘額
             $pharmacy = Pharmacy::findOrFail($data['pharmacy_id']);
@@ -85,11 +86,13 @@ class TransactionService
     public function processMaskPurchase(array $data)
     {
         return DB::transaction(function () use ($data) {
+            // 1. 檢查口罩庫存
             $mask = $this->maskRepository->findWithLock($data['mask_id']);
             if ($mask->stock < $data['quantity']) {
                 throw new \Exception('庫存不足');
             }
 
+            // 2. 檢查使用者餘額
             $user = User::lockForUpdate()->findOrFail($data['user_id']);
             $pharmacy = Pharmacy::lockForUpdate()->findOrFail($data['pharmacy_id']);
             
@@ -98,23 +101,36 @@ class TransactionService
                 throw new \Exception('餘額不足');
             }
 
-            // 更新口罩庫存和價格
+            // 3. 更新口罩庫存和價格
             $mask->decrement('stock', $data['quantity']);
             $mask->increment('price', 1); // 每次購買後價格增加 1 元
 
-            // 更新用戶餘額
+            // 4. 更新用戶餘額
             $user->decrement('cash_balance', $totalAmount);
 
-            // 更新藥局餘額
+            // 5. 更新藥局餘額
             $pharmacy->increment('cash_balance', $totalAmount);
 
-            return Transaction::create([
+            // 6. 建立交易記錄
+            $transaction = Transaction::create([
                 'user_id' => $data['user_id'],
                 'pharmacy_id' => $data['pharmacy_id'],
                 'mask_id' => $data['mask_id'],
                 'quantity' => $data['quantity'],
                 'amount' => $totalAmount
             ]);
+
+            // 7. 記錄交易日誌
+            Log::info('口罩購買交易完成', [
+                'transaction_id' => $transaction->id,
+                'user_id' => $user->id,
+                'pharmacy_id' => $pharmacy->id,
+                'mask_id' => $mask->id,
+                'quantity' => $data['quantity'],
+                'amount' => $totalAmount
+            ]);
+
+            return $transaction;
         });
     }
 
@@ -172,24 +188,7 @@ class TransactionService
         $cacheKey = "transaction_stats:" . md5($startDate . $endDate);
         
         return Cache::remember($cacheKey, 300, function () use ($startDate, $endDate) {
-            $query = Transaction::query();
-
-            if ($startDate) {
-                $query->where('created_at', '>=', $startDate);
-            }
-            if ($endDate) {
-                $query->where('created_at', '<=', $endDate . ' 23:59:59');
-            }
-
-            $totalTransactions = $query->count();
-            $totalAmount = $query->sum('amount');
-            $averageAmount = $totalTransactions > 0 ? $totalAmount / $totalTransactions : 0;
-
-            return [
-                'total_transactions' => $totalTransactions,
-                'total_amount' => $totalAmount,
-                'average_amount' => round($averageAmount, 2)
-            ];
+            return $this->transactionRepository->getTransactionStats($startDate, $endDate);
         });
     }
 } 

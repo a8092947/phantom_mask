@@ -444,9 +444,22 @@
                 "tags": [
                     "交易"
                 ],
-                "summary": "取得最高交易金額用戶列表",
+                "summary": "取得交易排名前 N 名的使用者",
+                "description": "根據不同的統計方式（總金額、交易次數、平均金額、口罩數量、最後交易時間）取得排名前 N 名的使用者",
                 "operationId": "947ff33d1e0d7ae6b41750b414a51c7e",
                 "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "description": "要返回的使用者數量",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 10,
+                            "maximum": 100,
+                            "minimum": 1
+                        }
+                    },
                     {
                         "name": "start_date",
                         "in": "query",
@@ -468,29 +481,45 @@
                         }
                     },
                     {
-                        "name": "limit",
+                        "name": "sort_by",
                         "in": "query",
-                        "description": "回傳數量限制 (預設: 10)",
+                        "description": "排序依據",
                         "required": false,
                         "schema": {
-                            "type": "integer",
-                            "default": 10,
-                            "minimum": 1
+                            "type": "string",
+                            "default": "amount",
+                            "enum": [
+                                "amount",
+                                "transaction_count",
+                                "avg_amount",
+                                "mask_count",
+                                "last_transaction"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "order_by",
+                        "in": "query",
+                        "description": "排序方式",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "default": "desc",
+                            "enum": [
+                                "asc",
+                                "desc"
+                            ]
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "成功取得最高交易金額用戶列表",
+                        "description": "成功取得使用者排名",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "properties": {
                                         "status": {
-                                            "type": "string",
-                                            "example": "success"
-                                        },
-                                        "message": {
                                             "type": "string",
                                             "example": "success"
                                         },
@@ -509,13 +538,30 @@
                                                     "cash_balance": {
                                                         "type": "number",
                                                         "format": "float",
-                                                        "example": 1000
+                                                        "example": 1000.5
                                                     },
                                                     "total_amount": {
-                                                        "description": "總交易金額",
                                                         "type": "number",
                                                         "format": "float",
-                                                        "example": 500
+                                                        "example": 500.75
+                                                    },
+                                                    "transaction_count": {
+                                                        "type": "integer",
+                                                        "example": 5
+                                                    },
+                                                    "avg_amount": {
+                                                        "type": "number",
+                                                        "format": "float",
+                                                        "example": 100.15
+                                                    },
+                                                    "mask_count": {
+                                                        "type": "integer",
+                                                        "example": 20
+                                                    },
+                                                    "last_transaction": {
+                                                        "type": "string",
+                                                        "format": "date-time",
+                                                        "example": "2024-03-15 10:30:00"
                                                     }
                                                 },
                                                 "type": "object"
@@ -528,7 +574,7 @@
                         }
                     },
                     "422": {
-                        "description": "驗證錯誤",
+                        "description": "驗證失敗",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -542,6 +588,38 @@
                                             "example": "驗證失敗"
                                         },
                                         "errors": {
+                                            "properties": {
+                                                "limit": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "start_date": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "end_date": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "sort_by": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                },
+                                                "order_by": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            },
                                             "type": "object"
                                         }
                                     },
@@ -562,9 +640,15 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "取得最高交易金額用戶失敗"
+                                            "example": "查詢最高交易金額的使用者失敗"
                                         },
                                         "errors": {
+                                            "properties": {
+                                                "error": {
+                                                    "type": "string",
+                                                    "example": "錯誤訊息"
+                                                }
+                                            },
                                             "type": "object"
                                         }
                                     },
