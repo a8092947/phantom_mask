@@ -11,6 +11,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use App\Models\Mask;
 use App\Models\Pharmacy;
+use App\Services\TransactionService;
 
 /**
  * @OA\Tag(
@@ -20,10 +21,17 @@ use App\Models\Pharmacy;
  */
 class TransactionController extends Controller
 {
+    protected $transactionService;
+
+    public function __construct(TransactionService $transactionService)
+    {
+        $this->transactionService = $transactionService;
+    }
+
     /**
      * @OA\Get(
      *     path="/api/transactions/top-users",
-     *     summary="查詢最高交易金額的使用者",
+     *     summary="取得最高交易金額用戶列表",
      *     tags={"交易"},
      *     @OA\Parameter(
      *         name="start_date",
@@ -42,13 +50,13 @@ class TransactionController extends Controller
      *     @OA\Parameter(
      *         name="limit",
      *         in="query",
-     *         description="回傳筆數",
+     *         description="回傳數量限制 (預設: 10)",
      *         required=false,
-     *         @OA\Schema(type="integer", minimum=1)
+     *         @OA\Schema(type="integer", minimum=1, default=10)
      *     ),
      *     @OA\Response(
      *         response=200,
-     *         description="成功取得使用者列表",
+     *         description="成功取得最高交易金額用戶列表",
      *         @OA\JsonContent(
      *             @OA\Property(property="status", type="string", example="success"),
      *             @OA\Property(property="message", type="string", example="success"),
@@ -59,7 +67,7 @@ class TransactionController extends Controller
      *                     @OA\Property(property="id", type="integer", example=1),
      *                     @OA\Property(property="name", type="string", example="John Doe"),
      *                     @OA\Property(property="cash_balance", type="number", format="float", example=1000.00),
-     *                     @OA\Property(property="total_amount", type="number", format="float", example=500.00)
+     *                     @OA\Property(property="total_amount", type="number", format="float", example=500.00, description="總交易金額")
      *                 )
      *             )
      *         )
@@ -78,7 +86,7 @@ class TransactionController extends Controller
      *         description="伺服器錯誤",
      *         @OA\JsonContent(
      *             @OA\Property(property="status", type="string", example="error"),
-     *             @OA\Property(property="message", type="string", example="查詢最高交易金額的使用者失敗"),
+     *             @OA\Property(property="message", type="string", example="取得最高交易金額用戶失敗"),
      *             @OA\Property(property="errors", type="object")
      *         )
      *     )
@@ -98,21 +106,11 @@ class TransactionController extends Controller
                 return $this->error('驗證失敗', $validator->errors(), 422);
             }
 
-            $query = User::withSum('transactions', 'amount')
-                        ->orderBy('transactions_sum_amount', 'desc');
-
-            if ($request->has('start_date') || $request->has('end_date')) {
-                $query->whereHas('transactions', function ($q) use ($request) {
-                    if ($request->has('start_date')) {
-                        $q->where('created_at', '>=', $request->start_date);
-                    }
-                    if ($request->has('end_date')) {
-                        $q->where('created_at', '<=', $request->end_date . ' 23:59:59');
-                    }
-                });
-            }
-
-            $users = $query->take($request->limit ?? 10)->get();
+            $users = $this->transactionService->getTopSpendersWithCache(
+                $request->limit ?? 10,
+                $request->start_date,
+                $request->end_date
+            );
 
             $result = $users->map(function ($user) {
                 return [
@@ -133,7 +131,7 @@ class TransactionController extends Controller
     /**
      * @OA\Get(
      *     path="/api/transactions/statistics",
-     *     summary="查詢交易統計",
+     *     summary="取得交易統計資訊",
      *     tags={"交易"},
      *     @OA\Parameter(
      *         name="start_date",
@@ -151,16 +149,16 @@ class TransactionController extends Controller
      *     ),
      *     @OA\Response(
      *         response=200,
-     *         description="成功取得交易統計",
+     *         description="成功取得交易統計資訊",
      *         @OA\JsonContent(
      *             @OA\Property(property="status", type="string", example="success"),
      *             @OA\Property(property="message", type="string", example="success"),
      *             @OA\Property(
      *                 property="data",
      *                 type="object",
-     *                 @OA\Property(property="total_transactions", type="integer", example=100),
-     *                 @OA\Property(property="total_amount", type="number", format="float", example=5000.00),
-     *                 @OA\Property(property="average_amount", type="number", format="float", example=50.00)
+     *                 @OA\Property(property="total_transactions", type="integer", example=100, description="總交易筆數"),
+     *                 @OA\Property(property="total_amount", type="number", format="float", example=5000.00, description="總交易金額"),
+     *                 @OA\Property(property="average_amount", type="number", format="float", example=50.00, description="平均交易金額")
      *             )
      *         )
      *     ),
@@ -178,7 +176,7 @@ class TransactionController extends Controller
      *         description="伺服器錯誤",
      *         @OA\JsonContent(
      *             @OA\Property(property="status", type="string", example="error"),
-     *             @OA\Property(property="message", type="string", example="查詢交易統計失敗"),
+     *             @OA\Property(property="message", type="string", example="取得交易統計資訊失敗"),
      *             @OA\Property(property="errors", type="object")
      *         )
      *     )
@@ -197,24 +195,10 @@ class TransactionController extends Controller
                 return $this->error('驗證失敗', $validator->errors(), 422);
             }
 
-            $query = Transaction::query();
-
-            if ($request->has('start_date')) {
-                $query->where('created_at', '>=', $request->start_date);
-            }
-            if ($request->has('end_date')) {
-                $query->where('created_at', '<=', $request->end_date . ' 23:59:59');
-            }
-
-            $totalTransactions = $query->count();
-            $totalAmount = $query->sum('amount');
-            $averageAmount = $totalTransactions > 0 ? $totalAmount / $totalTransactions : 0;
-
-            $result = [
-                'total_transactions' => $totalTransactions,
-                'total_amount' => $totalAmount,
-                'average_amount' => round($averageAmount, 2)
-            ];
+            $result = $this->transactionService->getTransactionStatsWithCache(
+                $request->start_date,
+                $request->end_date
+            );
 
             return $this->success($result);
         } catch (\Exception $e) {
@@ -232,10 +216,10 @@ class TransactionController extends Controller
      *         required=true,
      *         @OA\JsonContent(
      *             required={"user_id", "pharmacy_id", "mask_id", "quantity"},
-     *             @OA\Property(property="user_id", type="integer", example=1),
-     *             @OA\Property(property="pharmacy_id", type="integer", example=1),
-     *             @OA\Property(property="mask_id", type="integer", example=1),
-     *             @OA\Property(property="quantity", type="integer", example=2)
+     *             @OA\Property(property="user_id", type="integer", example=1, description="用戶 ID"),
+     *             @OA\Property(property="pharmacy_id", type="integer", example=1, description="藥局 ID"),
+     *             @OA\Property(property="mask_id", type="integer", example=1, description="口罩 ID"),
+     *             @OA\Property(property="quantity", type="integer", example=1, description="購買數量", minimum=1)
      *         )
      *     ),
      *     @OA\Response(
@@ -243,7 +227,7 @@ class TransactionController extends Controller
      *         description="成功建立交易",
      *         @OA\JsonContent(
      *             @OA\Property(property="status", type="string", example="success"),
-     *             @OA\Property(property="message", type="string", example="交易建立成功"),
+     *             @OA\Property(property="message", type="string", example="交易成功"),
      *             @OA\Property(
      *                 property="data",
      *                 type="object",
@@ -251,10 +235,19 @@ class TransactionController extends Controller
      *                 @OA\Property(property="user_id", type="integer", example=1),
      *                 @OA\Property(property="pharmacy_id", type="integer", example=1),
      *                 @OA\Property(property="mask_id", type="integer", example=1),
-     *                 @OA\Property(property="quantity", type="integer", example=2),
-     *                 @OA\Property(property="amount", type="number", format="float", example=20.00),
+     *                 @OA\Property(property="quantity", type="integer", example=1),
+     *                 @OA\Property(property="amount", type="number", format="float", example=10.00),
      *                 @OA\Property(property="created_at", type="string", format="date-time")
      *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=400,
+     *         description="庫存不足或餘額不足",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="string", example="error"),
+     *             @OA\Property(property="message", type="string", example="庫存不足"),
+     *             @OA\Property(property="errors", type="object")
      *         )
      *     ),
      *     @OA\Response(
@@ -271,7 +264,7 @@ class TransactionController extends Controller
      *         description="伺服器錯誤",
      *         @OA\JsonContent(
      *             @OA\Property(property="status", type="string", example="error"),
-     *             @OA\Property(property="message", type="string", example="處理交易失敗"),
+     *             @OA\Property(property="message", type="string", example="建立交易失敗"),
      *             @OA\Property(property="errors", type="object")
      *         )
      *     )
@@ -292,40 +285,7 @@ class TransactionController extends Controller
         }
 
         try {
-            $transaction = DB::transaction(function () use ($request) {
-                // 使用 lockForUpdate 鎖定要更新的記錄
-                $mask = Mask::lockForUpdate()->findOrFail($request->mask_id);
-                if ($mask->stock < $request->quantity) {
-                    throw new \Exception('庫存不足');
-                }
-
-                $user = User::lockForUpdate()->findOrFail($request->user_id);
-                $pharmacy = Pharmacy::lockForUpdate()->findOrFail($request->pharmacy_id);
-                
-                $totalAmount = $mask->price * $request->quantity;
-                if ($user->cash_balance < $totalAmount) {
-                    throw new \Exception('餘額不足');
-                }
-
-                // 更新口罩庫存和價格
-                $mask->decrement('stock', $request->quantity);
-                $mask->increment('price', 1); // 每次購買後價格增加 1 元
-
-                // 更新用戶餘額
-                $user->decrement('cash_balance', $totalAmount);
-
-                // 更新藥局餘額
-                $pharmacy->increment('cash_balance', $totalAmount);
-
-                return Transaction::create([
-                    'user_id' => $request->user_id,
-                    'pharmacy_id' => $request->pharmacy_id,
-                    'mask_id' => $request->mask_id,
-                    'quantity' => $request->quantity,
-                    'amount' => $totalAmount
-                ]);
-            });
-
+            $transaction = $this->transactionService->processMaskPurchase($request->all());
             return $this->success($transaction, '交易建立成功', 201);
         } catch (\Exception $e) {
             Log::error('Transaction store failed', ['error' => $e->getMessage()]);

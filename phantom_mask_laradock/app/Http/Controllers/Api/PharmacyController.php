@@ -48,7 +48,7 @@ class PharmacyController extends Controller
      *     @OA\Parameter(
      *         name="q",
      *         in="query",
-     *         description="搜尋關鍵字（藥局名稱或口罩名稱）",
+     *         description="搜尋關鍵字（藥局名稱或口罩名稱），結果會按相關性排序：1. 完全匹配 2. 部分匹配 3. 口罩名稱匹配",
      *         required=false,
      *         @OA\Schema(type="string", minLength=1)
      *     ),
@@ -69,7 +69,7 @@ class PharmacyController extends Controller
      *     @OA\Parameter(
      *         name="mask_count",
      *         in="query",
-     *         description="最少口罩數量",
+     *         description="口罩數量（大於等於此數量的藥局）",
      *         required=false,
      *         @OA\Schema(type="integer", minimum=1)
      *     ),
@@ -263,14 +263,14 @@ class PharmacyController extends Controller
      *     @OA\Parameter(
      *         name="sort",
      *         in="query",
-     *         description="排序方式 (name/price)",
+     *         description="排序欄位 (name: 口罩名稱, price: 價格)",
      *         required=false,
      *         @OA\Schema(type="string", enum={"name", "price"})
      *     ),
      *     @OA\Parameter(
      *         name="order",
      *         in="query",
-     *         description="排序順序 (asc/desc)",
+     *         description="排序方向 (asc: 升序, desc: 降序)",
      *         required=false,
      *         @OA\Schema(type="string", enum={"asc", "desc"})
      *     ),
@@ -314,6 +314,15 @@ class PharmacyController extends Controller
      *         @OA\JsonContent(
      *             @OA\Property(property="status", type="string", example="error"),
      *             @OA\Property(property="message", type="string", example="藥局不存在"),
+     *             @OA\Property(property="errors", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="驗證錯誤",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="string", example="error"),
+     *             @OA\Property(property="message", type="string", example="驗證失敗"),
      *             @OA\Property(property="errors", type="object")
      *         )
      *     ),

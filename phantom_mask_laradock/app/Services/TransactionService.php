@@ -11,6 +11,7 @@ use App\Repositories\UserRepository;
 use App\Repositories\MaskRepository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class TransactionService
 {
@@ -75,6 +76,49 @@ class TransactionService
     }
 
     /**
+     * 處理口罩購買交易
+     *
+     * @param array $data
+     * @return Transaction
+     * @throws \Exception
+     */
+    public function processMaskPurchase(array $data)
+    {
+        return DB::transaction(function () use ($data) {
+            $mask = $this->maskRepository->findWithLock($data['mask_id']);
+            if ($mask->stock < $data['quantity']) {
+                throw new \Exception('庫存不足');
+            }
+
+            $user = User::lockForUpdate()->findOrFail($data['user_id']);
+            $pharmacy = Pharmacy::lockForUpdate()->findOrFail($data['pharmacy_id']);
+            
+            $totalAmount = $mask->price * $data['quantity'];
+            if ($user->cash_balance < $totalAmount) {
+                throw new \Exception('餘額不足');
+            }
+
+            // 更新口罩庫存和價格
+            $mask->decrement('stock', $data['quantity']);
+            $mask->increment('price', 1); // 每次購買後價格增加 1 元
+
+            // 更新用戶餘額
+            $user->decrement('cash_balance', $totalAmount);
+
+            // 更新藥局餘額
+            $pharmacy->increment('cash_balance', $totalAmount);
+
+            return Transaction::create([
+                'user_id' => $data['user_id'],
+                'pharmacy_id' => $data['pharmacy_id'],
+                'mask_id' => $data['mask_id'],
+                'quantity' => $data['quantity'],
+                'amount' => $totalAmount
+            ]);
+        });
+    }
+
+    /**
      * 取得交易統計
      *
      * @param string $startDate
@@ -97,5 +141,55 @@ class TransactionService
     public function getTopSpenders(int $limit, string $startDate, string $endDate)
     {
         return $this->userRepository->getTopSpenders($limit, $startDate, $endDate);
+    }
+
+    /**
+     * 取得前 N 名消費使用者（帶快取）
+     *
+     * @param int $limit
+     * @param string|null $startDate
+     * @param string|null $endDate
+     * @return \Illuminate\Database\Eloquent\Collection
+     */
+    public function getTopSpendersWithCache(int $limit, ?string $startDate = null, ?string $endDate = null)
+    {
+        $cacheKey = "top_spenders:{$limit}:" . md5($startDate . $endDate);
+        
+        return Cache::remember($cacheKey, 300, function () use ($limit, $startDate, $endDate) {
+            return $this->userRepository->getTopSpenders($limit, $startDate, $endDate);
+        });
+    }
+
+    /**
+     * 取得交易統計（帶快取）
+     *
+     * @param string|null $startDate
+     * @param string|null $endDate
+     * @return array
+     */
+    public function getTransactionStatsWithCache(?string $startDate = null, ?string $endDate = null)
+    {
+        $cacheKey = "transaction_stats:" . md5($startDate . $endDate);
+        
+        return Cache::remember($cacheKey, 300, function () use ($startDate, $endDate) {
+            $query = Transaction::query();
+
+            if ($startDate) {
+                $query->where('created_at', '>=', $startDate);
+            }
+            if ($endDate) {
+                $query->where('created_at', '<=', $endDate . ' 23:59:59');
+            }
+
+            $totalTransactions = $query->count();
+            $totalAmount = $query->sum('amount');
+            $averageAmount = $totalTransactions > 0 ? $totalAmount / $totalTransactions : 0;
+
+            return [
+                'total_transactions' => $totalTransactions,
+                'total_amount' => $totalAmount,
+                'average_amount' => round($averageAmount, 2)
+            ];
+        });
     }
 } 

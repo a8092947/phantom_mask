@@ -68,7 +68,7 @@
                     {
                         "name": "q",
                         "in": "query",
-                        "description": "搜尋關鍵字（藥局名稱或口罩名稱）",
+                        "description": "搜尋關鍵字（藥局名稱或口罩名稱），結果會按相關性排序：1. 完全匹配 2. 部分匹配 3. 口罩名稱匹配",
                         "required": false,
                         "schema": {
                             "type": "string",
@@ -100,7 +100,7 @@
                     {
                         "name": "mask_count",
                         "in": "query",
-                        "description": "最少口罩數量",
+                        "description": "口罩數量（大於等於此數量的藥局）",
                         "required": false,
                         "schema": {
                             "type": "integer",
@@ -265,7 +265,7 @@
                     {
                         "name": "sort",
                         "in": "query",
-                        "description": "排序方式 (name/price)",
+                        "description": "排序欄位 (name: 口罩名稱, price: 價格)",
                         "required": false,
                         "schema": {
                             "type": "string",
@@ -278,7 +278,7 @@
                     {
                         "name": "order",
                         "in": "query",
-                        "description": "排序順序 (asc/desc)",
+                        "description": "排序方向 (asc: 升序, desc: 降序)",
                         "required": false,
                         "schema": {
                             "type": "string",
@@ -396,6 +396,29 @@
                             }
                         }
                     },
+                    "422": {
+                        "description": "驗證錯誤",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "error"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "驗證失敗"
+                                        },
+                                        "errors": {
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
                     "500": {
                         "description": "伺服器錯誤",
                         "content": {
@@ -427,7 +450,7 @@
                 "tags": [
                     "交易"
                 ],
-                "summary": "查詢最高交易金額的使用者",
+                "summary": "取得最高交易金額用戶列表",
                 "operationId": "947ff33d1e0d7ae6b41750b414a51c7e",
                 "parameters": [
                     {
@@ -453,17 +476,18 @@
                     {
                         "name": "limit",
                         "in": "query",
-                        "description": "回傳筆數",
+                        "description": "回傳數量限制 (預設: 10)",
                         "required": false,
                         "schema": {
                             "type": "integer",
+                            "default": 10,
                             "minimum": 1
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "成功取得使用者列表",
+                        "description": "成功取得最高交易金額用戶列表",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -494,6 +518,7 @@
                                                         "example": 1000
                                                     },
                                                     "total_amount": {
+                                                        "description": "總交易金額",
                                                         "type": "number",
                                                         "format": "float",
                                                         "example": 500
@@ -543,7 +568,7 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "查詢最高交易金額的使用者失敗"
+                                            "example": "取得最高交易金額用戶失敗"
                                         },
                                         "errors": {
                                             "type": "object"
@@ -562,7 +587,7 @@
                 "tags": [
                     "交易"
                 ],
-                "summary": "查詢交易統計",
+                "summary": "取得交易統計資訊",
                 "operationId": "b4a000ea9841dbecf9a94cdc80a2b23f",
                 "parameters": [
                     {
@@ -588,7 +613,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "成功取得交易統計",
+                        "description": "成功取得交易統計資訊",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -604,15 +629,18 @@
                                         "data": {
                                             "properties": {
                                                 "total_transactions": {
+                                                    "description": "總交易筆數",
                                                     "type": "integer",
                                                     "example": 100
                                                 },
                                                 "total_amount": {
+                                                    "description": "總交易金額",
                                                     "type": "number",
                                                     "format": "float",
                                                     "example": 5000
                                                 },
                                                 "average_amount": {
+                                                    "description": "平均交易金額",
                                                     "type": "number",
                                                     "format": "float",
                                                     "example": 50
@@ -661,7 +689,7 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "查詢交易統計失敗"
+                                            "example": "取得交易統計資訊失敗"
                                         },
                                         "errors": {
                                             "type": "object"
@@ -695,20 +723,25 @@
                                 ],
                                 "properties": {
                                     "user_id": {
+                                        "description": "用戶 ID",
                                         "type": "integer",
                                         "example": 1
                                     },
                                     "pharmacy_id": {
+                                        "description": "藥局 ID",
                                         "type": "integer",
                                         "example": 1
                                     },
                                     "mask_id": {
+                                        "description": "口罩 ID",
                                         "type": "integer",
                                         "example": 1
                                     },
                                     "quantity": {
+                                        "description": "購買數量",
                                         "type": "integer",
-                                        "example": 2
+                                        "minimum": 1,
+                                        "example": 1
                                     }
                                 },
                                 "type": "object"
@@ -729,7 +762,7 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "交易建立成功"
+                                            "example": "交易成功"
                                         },
                                         "data": {
                                             "properties": {
@@ -751,18 +784,41 @@
                                                 },
                                                 "quantity": {
                                                     "type": "integer",
-                                                    "example": 2
+                                                    "example": 1
                                                 },
                                                 "amount": {
                                                     "type": "number",
                                                     "format": "float",
-                                                    "example": 20
+                                                    "example": 10
                                                 },
                                                 "created_at": {
                                                     "type": "string",
                                                     "format": "date-time"
                                                 }
                                             },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "庫存不足或餘額不足",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "error"
+                                        },
+                                        "message": {
+                                            "type": "string",
+                                            "example": "庫存不足"
+                                        },
+                                        "errors": {
                                             "type": "object"
                                         }
                                     },
@@ -806,7 +862,7 @@
                                         },
                                         "message": {
                                             "type": "string",
-                                            "example": "處理交易失敗"
+                                            "example": "建立交易失敗"
                                         },
                                         "errors": {
                                             "type": "object"
