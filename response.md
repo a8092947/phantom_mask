@@ -5,6 +5,7 @@
 - 使用 Laravel 框架 (版本 10.x)
 - 使用 MySQL 資料庫
 - 使用 Laradock 作為開發環境
+- 部屬網址：https://phantom_mask_laradock.kdan.succ.work/api/documentation#/
 
 ### A.2. 需求完成度
 1. 列出特定時間營業的藥局 (List all pharmacies open at a specific time and on a day of the week if requested)
