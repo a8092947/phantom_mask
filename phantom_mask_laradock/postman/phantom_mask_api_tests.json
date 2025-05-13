@@ -502,7 +502,7 @@
   "variable": [
     {
       "key": "base_url",
-      "value": "http://phantom_mask_laradock.kdan.succ.work",
+      "value": "https://phantom_mask_laradock.kdan.succ.work",
       "type": "string"
     }
   ]
