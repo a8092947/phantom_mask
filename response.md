@@ -108,12 +108,10 @@
 ### A.4. API 文件
 1. 使用 OpenAPI 規格
   - 參考Swagger UI 路徑：`phantom_mask_laradock/storage/api-docs/api-docs.json`
-2. 提供 API 測試工具
-2.1. 提供 Postman 集合與自動測試報告
+2. 提供 Postman 集合與自動測試報告
   - postman匯出檔案：`docs/Phantom Mask API.postman_collection.json`
   - 測試報告參考截圖：`docs/postman-test.png`
-  
-2.1. 提供 Postman 執行後的具體的內容
+3. 提供 Postman 執行後的具體的內容
   - 前端可直接對照範例參考截圖：`docs/postman-api-example/` 目錄下的所有檔案
 
 
