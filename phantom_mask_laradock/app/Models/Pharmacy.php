@@ -79,11 +79,6 @@ class Pharmacy extends Model
     // 事件處理
     protected static function booted()
     {
-        static::creating(function ($pharmacy) {
-            // 建立藥局時的處理邏輯
-            $pharmacy->cash_balance = 0;
-        });
-
         static::deleting(function ($pharmacy) {
             // 刪除藥局時的處理邏輯
             $pharmacy->masks()->delete();
