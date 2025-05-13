@@ -18,7 +18,7 @@ namespace App\OpenApi;
  * )
  * 
  * @OA\Server(
- *     url="http://phantom_mask_laradock.kdan.succ.work",
+ *     url="https://phantom_mask_laradock.kdan.succ.work",
  *     description="Development API Server"
  * )
  * 
