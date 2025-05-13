@@ -163,9 +163,10 @@ class TransactionService
         } catch (\Exception $e) {
             Log::error('查詢交易統計失敗', [
                 'params' => $params,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
-            throw new \Exception('查詢交易統計失敗');
+            throw new \Exception('查詢交易統計失敗: ' . $e->getMessage());
         }
     }
 

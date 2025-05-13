@@ -57,7 +57,7 @@ class TransactionRepository extends BaseRepository
         // 應用查詢條件
         $this->applyQueryFilters($query, $params);
 
-        return $query->select([
+        $result = $query->select([
             DB::raw('COUNT(*) as total_transactions'),
             DB::raw('SUM(quantity) as total_masks'),
             DB::raw('SUM(amount) as total_amount'),
@@ -65,7 +65,22 @@ class TransactionRepository extends BaseRepository
             DB::raw('MAX(amount) as max_amount'),
             DB::raw('MIN(amount) as min_amount'),
             DB::raw('AVG(quantity) as average_quantity')
-        ])->first()->toArray();
+        ])->first();
+
+        // 如果沒有資料，返回預設值
+        if (!$result) {
+            return [
+                'total_transactions' => 0,
+                'total_masks' => 0,
+                'total_amount' => 0,
+                'average_amount' => 0,
+                'max_amount' => 0,
+                'min_amount' => 0,
+                'average_quantity' => 0
+            ];
+        }
+
+        return $result->toArray();
     }
 
     /**
@@ -139,7 +154,19 @@ class TransactionRepository extends BaseRepository
         // 應用查詢條件
         $this->applyQueryFilters($query, $params);
 
-        return $query->first()->toArray();
+        $result = $query->first();
+
+        // 如果沒有資料，返回預設值
+        if (!$result) {
+            return [
+                'morning' => 0,
+                'afternoon' => 0,
+                'evening' => 0,
+                'night' => 0
+            ];
+        }
+
+        return $result->toArray();
     }
 
     /**
@@ -153,41 +180,41 @@ class TransactionRepository extends BaseRepository
     {
         // 日期範圍
         if (!empty($params['start_date'])) {
-            $query->where('transaction_date', '>=', $params['start_date']);
+            $query->where('transactions.transaction_date', '>=', $params['start_date']);
         }
         if (!empty($params['end_date'])) {
-            $query->where('transaction_date', '<=', $params['end_date']);
+            $query->where('transactions.transaction_date', '<=', $params['end_date']);
         }
 
         // 藥局
         if (!empty($params['pharmacy_id'])) {
-            $query->where('pharmacy_id', $params['pharmacy_id']);
+            $query->where('transactions.pharmacy_id', $params['pharmacy_id']);
         }
 
         // 口罩
         if (!empty($params['mask_id'])) {
-            $query->where('mask_id', $params['mask_id']);
+            $query->where('transactions.mask_id', $params['mask_id']);
         }
 
         // 用戶
         if (!empty($params['user_id'])) {
-            $query->where('user_id', $params['user_id']);
+            $query->where('transactions.user_id', $params['user_id']);
         }
 
         // 分組
         if (!empty($params['group_by'])) {
             switch ($params['group_by']) {
                 case 'day':
-                    $query->groupBy(DB::raw('DATE(transaction_date)'));
+                    $query->groupBy(DB::raw('DATE(transactions.transaction_date)'));
                     break;
                 case 'week':
-                    $query->groupBy(DB::raw('YEARWEEK(transaction_date)'));
+                    $query->groupBy(DB::raw('YEARWEEK(transactions.transaction_date)'));
                     break;
                 case 'month':
-                    $query->groupBy(DB::raw('DATE_FORMAT(transaction_date, "%Y-%m")'));
+                    $query->groupBy(DB::raw('DATE_FORMAT(transactions.transaction_date, "%Y-%m")'));
                     break;
                 case 'year':
-                    $query->groupBy(DB::raw('YEAR(transaction_date)'));
+                    $query->groupBy(DB::raw('YEAR(transactions.transaction_date)'));
                     break;
             }
         }
