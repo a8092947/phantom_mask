@@ -41,7 +41,7 @@ class PharmacyController extends Controller
      *     @OA\Parameter(
      *         name="time",
      *         in="query",
-     *         description="時間 (HH:mm)",
+     *         description="營業時間篩選 (HH:mm 格式，例如：09:00)。會篩選出在指定時間點正在營業的藥局，即藥局的營業時間範圍包含此時間點",
      *         required=false,
      *         @OA\Schema(type="string", format="time", pattern="^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$")
      *     ),
@@ -69,7 +69,7 @@ class PharmacyController extends Controller
      *     @OA\Parameter(
      *         name="mask_count",
      *         in="query",
-     *         description="口罩數量（大於等於此數量的藥局）",
+     *         description="口罩產品種類數量（大於等於此數量的藥局）",
      *         required=false,
      *         @OA\Schema(type="integer", minimum=1)
      *     ),
@@ -219,9 +219,7 @@ class PharmacyController extends Controller
                 }
 
                 if ($request->has('mask_count')) {
-                    $query->whereHas('masks', function ($q) use ($request) {
-                        $q->where('stock', '>=', $request->mask_count);
-                    });
+                    $query->withCount('masks')->having('masks_count', '>=', $request->mask_count);
                 }
             }
 
@@ -272,16 +270,16 @@ class PharmacyController extends Controller
      *     @OA\Parameter(
      *         name="sort",
      *         in="query",
-     *         description="排序欄位 (name: 口罩名稱, price: 價格)",
+     *         description="排序欄位，可多選，用逗號分隔。支援的欄位：name（口罩名稱）, price（價格）, stock（庫存）。例如：name,price",
      *         required=false,
-     *         @OA\Schema(type="string", enum={"name", "price"})
+     *         @OA\Schema(type="string", pattern="^(name|price|stock)(,(name|price|stock))*$")
      *     ),
      *     @OA\Parameter(
      *         name="order",
      *         in="query",
-     *         description="排序方向 (asc: 升序, desc: 降序)",
+     *         description="排序方向，可多選，用逗號分隔。支援的值：asc（升序）, desc（降序）。例如：asc,desc。如果提供的排序方向數量少於排序欄位數量，將使用最後一個排序方向",
      *         required=false,
-     *         @OA\Schema(type="string", enum={"asc", "desc"})
+     *         @OA\Schema(type="string", pattern="^(asc|desc)(,(asc|desc))*$")
      *     ),
      *     @OA\Response(
      *         response=200,
@@ -349,8 +347,8 @@ class PharmacyController extends Controller
     public function show(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'sort' => 'nullable|in:name,price',
-            'order' => 'nullable|in:asc,desc'
+            'sort' => ['nullable', 'regex:/^(name|price|stock)(,(name|price|stock))*$/'],
+            'order' => ['nullable', 'regex:/^(asc|desc)(,(asc|desc))*$/']
         ]);
 
         if ($validator->fails()) {
@@ -361,8 +359,18 @@ class PharmacyController extends Controller
         try {
             $pharmacy = Pharmacy::with(['openingHours', 'masks' => function ($query) use ($request) {
                 if ($request->has('sort')) {
-                    $order = $request->input('order', 'asc');
-                    $query->orderBy($request->sort, $order);
+                    $sortFields = explode(',', $request->sort);
+                    $orderDirections = $request->has('order') ? explode(',', $request->order) : ['asc'];
+                    
+                    // 如果排序方向數量少於排序欄位數量，使用最後一個排序方向
+                    $lastOrder = end($orderDirections);
+                    while (count($orderDirections) < count($sortFields)) {
+                        $orderDirections[] = $lastOrder;
+                    }
+
+                    foreach ($sortFields as $index => $field) {
+                        $query->orderBy($field, $orderDirections[$index]);
+                    }
                 }
             }])->findOrFail($id);
 

@@ -57,7 +57,7 @@
                     {
                         "name": "time",
                         "in": "query",
-                        "description": "時間 (HH:mm)",
+                        "description": "營業時間篩選 (HH:mm 格式，例如：09:00)。會篩選出在指定時間點正在營業的藥局，即藥局的營業時間範圍包含此時間點",
                         "required": false,
                         "schema": {
                             "type": "string",
@@ -100,7 +100,7 @@
                     {
                         "name": "mask_count",
                         "in": "query",
-                        "description": "口罩數量（大於等於此數量的藥局）",
+                        "description": "口罩產品種類數量（大於等於此數量的藥局）",
                         "required": false,
                         "schema": {
                             "type": "integer",
@@ -265,27 +265,21 @@
                     {
                         "name": "sort",
                         "in": "query",
-                        "description": "排序欄位 (name: 口罩名稱, price: 價格)",
+                        "description": "排序欄位，可多選，用逗號分隔。支援的欄位：name（口罩名稱）, price（價格）, stock（庫存）。例如：name,price",
                         "required": false,
                         "schema": {
                             "type": "string",
-                            "enum": [
-                                "name",
-                                "price"
-                            ]
+                            "pattern": "^(name|price|stock)(,(name|price|stock))*$"
                         }
                     },
                     {
                         "name": "order",
                         "in": "query",
-                        "description": "排序方向 (asc: 升序, desc: 降序)",
+                        "description": "排序方向，可多選，用逗號分隔。支援的值：asc（升序）, desc（降序）。例如：asc,desc。如果提供的排序方向數量少於排序欄位數量，將使用最後一個排序方向",
                         "required": false,
                         "schema": {
                             "type": "string",
-                            "enum": [
-                                "asc",
-                                "desc"
-                            ]
+                            "pattern": "^(asc|desc)(,(asc|desc))*$"
                         }
                     }
                 ],
