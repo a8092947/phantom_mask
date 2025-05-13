@@ -137,13 +137,16 @@ class TransactionService
     /**
      * 取得交易統計
      *
-     * @param string $startDate
-     * @param string $endDate
+     * @param string|null $startDate
+     * @param string|null $endDate
      * @return array
      */
-    public function getTransactionStats(string $startDate, string $endDate)
+    public function getTransactionStats(?string $startDate = null, ?string $endDate = null)
     {
-        return $this->transactionRepository->getTransactionStats($startDate, $endDate);
+        // 使用快取，快取時間為 1 小時
+        return Cache::remember('transaction_stats', 3600, function () use ($startDate, $endDate) {
+            return $this->transactionRepository->getTransactionStats($startDate, $endDate);
+        });
     }
 
     /**

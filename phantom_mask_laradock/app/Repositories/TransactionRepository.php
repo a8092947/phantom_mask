@@ -47,24 +47,34 @@ class TransactionRepository extends BaseRepository
     /**
      * 取得交易統計
      *
-     * @param string $startDate
-     * @param string $endDate
+     * @param string|null $startDate
+     * @param string|null $endDate
      * @return array
      */
-    public function getTransactionStats(string $startDate, string $endDate)
+    public function getTransactionStats(?string $startDate = null, ?string $endDate = null)
     {
-        $stats = $this->model->whereBetween('transaction_date', [$startDate, $endDate])
-            ->select(
-                DB::raw('COUNT(*) as total_transactions'),
-                DB::raw('SUM(quantity) as total_masks'),
-                DB::raw('SUM(amount) as total_amount')
-            )
-            ->first();
+        $query = $this->model->query();
+
+        // 日期範圍篩選
+        if ($startDate) {
+            $query->where('transaction_date', '>=', $startDate);
+        }
+        if ($endDate) {
+            $query->where('transaction_date', '<=', $endDate . ' 23:59:59');
+        }
+
+        $stats = $query->select(
+            DB::raw('COUNT(*) as total_transactions'),
+            DB::raw('SUM(quantity) as total_masks'),
+            DB::raw('SUM(amount) as total_amount'),
+            DB::raw('AVG(amount) as average_amount')
+        )->first();
 
         return [
             'total_transactions' => $stats->total_transactions ?? 0,
             'total_masks' => $stats->total_masks ?? 0,
-            'total_amount' => $stats->total_amount ?? 0
+            'total_amount' => $stats->total_amount ?? 0,
+            'average_amount' => $stats->average_amount ?? 0
         ];
     }
 

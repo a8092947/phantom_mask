@@ -365,10 +365,12 @@ class ImportDataCommand extends Command
                     continue;
                 }
 
+                // 如果原始資料中沒有 quantity 欄位，預設為 1
                 $transactions[] = [
                     'user_id' => $user->id,
                     'pharmacy_id' => $pharmacy->id,
                     'mask_id' => $mask->id,
+                    'quantity' => 1, // 預設購買數量為 1
                     'amount' => $history['transactionAmount'],
                     'transaction_date' => Carbon::parse($history['transactionDate'])
                 ];
