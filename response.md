@@ -131,6 +131,6 @@
    - 參考檔案：`database/migrations/` 目錄下的所有檔案
 3. 索引設計
    - 參考檔案：`database/migrations/` 目錄下的所有檔案
-4.Dockerize
+4. Dockerize
    - 本次沒有針對docker環境特別要求，也使用Laradock為開發和部屬環境，因此並未將docker環境與筆試作業合併打包
    - 目前的執行環境中，也都是使用 docker 與 VM 來平衡開發環境的不確定性，也有達到筆試Bouns的要求「You may use docker to ensure a uniform setup across environments.」
